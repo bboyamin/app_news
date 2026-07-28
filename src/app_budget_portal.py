@@ -80,6 +80,46 @@ st.markdown("""
         color: #1e3a8a;
     }
 
+    /* 검색 키워드 모던 대형 콘솔 박스 */
+    .search-console-card {
+        background: #ffffff;
+        border: 2px solid #3b82f6;
+        border-radius: 14px;
+        padding: 18px 22px 14px 22px;
+        margin-top: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
+    }
+    
+    .search-console-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1e3a8a;
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* 입력 텍스트 박스 고시성 강화 */
+    div[data-baseweb="input"] {
+        border-radius: 10px !important;
+        border: 1.5px solid #93c5fd !important;
+        background-color: #f8fafc !important;
+    }
+    
+    div[data-baseweb="input"]:focus-within {
+        border-color: #2563eb !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+    }
+    
+    div[data-baseweb="input"] input {
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        color: #0f172a !important;
+    }
+
     /* 산출근거 수식 카드 */
     .detail-box {
         background: #ffffff;
@@ -206,12 +246,22 @@ if sel_budget_type != "전체":
     filtered_df = filtered_df[filtered_df['예산구분'] == sel_budget_type]
 
 # ==========================================
-# 4. 실시간 통합 키워드 검색창
+# 4. 실시간 통합 키워드 검색창 (시선집중 모던 콘솔)
 # ==========================================
 st.markdown("---")
+st.markdown("""
+<div class="search-console-card">
+    <div class="search-console-title">🔎 스마트 세출 예산 통합 키워드 검색</div>
+    <div style="font-size: 13.5px; color: #475569; margin-bottom: 8px;">
+        원하시는 단어를 입력하시면 <b>10개 모든 텍스트 영역에서 띄어쓰기 유무에 상관없이 0.1초 만에 스마트 탐색</b>됩니다.
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 search_keyword = st.text_input(
-    "🔎 예산 통합 검색어 입력", 
-    placeholder="검색할 단어를 입력하세요 (예: 시민소통, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)"
+    "통합 검색어 입력", 
+    placeholder="👉 원하시는 검색어를 자유롭게 입력하세요 (예: 정보화 교육, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)",
+    label_visibility="collapsed"
 )
 
 search_df = filtered_df.copy()
