@@ -302,7 +302,7 @@ event = st.dataframe(
     use_container_width=True,
     height=450,
     on_select="rerun",
-    selection_mode="multi_row",
+    selection_mode="multi-row",
     column_config={
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
