@@ -8,16 +8,22 @@ import streamlit as st
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 TEMP_DOC_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp_docs", "합본예산서(세출)_산출근거별.csv")
 
+# 100% 데드락 없는 파이썬 고속 인메모리 저장소
+_MEMORY_CACHE = {}
+
 def ensure_data_dir():
-    """데이터 디렉토리 생성 및 초기 2026년 데이터 무결성 세팅"""
+    """데이터 디렉토리 생성 및 초기 2026년 데이터 세팅"""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
     
     file_2026 = os.path.join(DATA_DIR, "budget_2026.csv")
     if not os.path.exists(file_2026) and os.path.exists(TEMP_DOC_PATH):
         try:
-            df = load_raw_csv(TEMP_DOC_PATH)
-            save_processed_csv(df, 2026)
+            df_raw = read_csv_robust(TEMP_DOC_PATH)
+            df_clean = clean_budget_dataframe(df_raw)
+            df_clean['회계연도'] = 2026
+            df_clean.to_csv(file_2026, index=False, encoding="utf-8-sig")
+            _MEMORY_CACHE['2026'] = df_clean
         except Exception as e:
             print(f"Error seeding 2026 budget data: {e}")
 
@@ -35,7 +41,7 @@ def read_csv_robust(filepath_or_buffer):
                 low_memory=False, 
                 on_bad_lines='skip'
             )
-            if not df.empty and len(df.columns) > 5:
+            if not df.empty and len(df.columns) > 3:
                 return df
         except Exception:
             continue
@@ -61,7 +67,7 @@ def clean_num(val):
         return 0.0
 
 def clean_budget_dataframe(df_raw):
-    """예산 데이터프레임 단일 무결 정제 엔진 (재귀 없는 1회 정제)"""
+    """예산 데이터프레임 무결 정제 엔진 및 필수 컬럼 자동 생성"""
     df = df_raw.copy()
     
     # 0행이 서브헤더 ('경정', '기정', '증감' 등)인 경우 서브헤더 행 제외
@@ -78,7 +84,7 @@ def clean_budget_dataframe(df_raw):
     else:
         df['회계연도'] = 2026
 
-    # 필수 텍스트 컬럼 정제 (NaN 방지)
+    # 필수 텍스트 컬럼 정제 및 누락 시 자동 생성
     text_cols = ['예산구분', '분야명', '부문명', '위원회명', '정책사업명', '단위사업명', 
                  '회계명', '세부사업명', '부서명', '편성목명', '통계목명', '의무/재량구분', '산출근거명', '산출근거식']
     
@@ -113,7 +119,7 @@ def clean_budget_dataframe(df_raw):
     return df
 
 def load_raw_csv(filepath_or_buffer):
-    """CSV 파싱 및 정제 통합 함수 (업로드 시 1회 호출)"""
+    """CSV 파싱 및 정제 통합 함수"""
     df_raw = read_csv_robust(filepath_or_buffer)
     if df_raw.empty:
         raise ValueError("CSV 파일에 읽을 수 있는 데이터가 없습니다.")
@@ -125,7 +131,7 @@ def save_processed_csv(df, year):
     df['회계연도'] = int(year)
     out_path = os.path.join(DATA_DIR, f"budget_{year}.csv")
     df.to_csv(out_path, index=False, encoding="utf-8-sig")
-    st.cache_data.clear()
+    _MEMORY_CACHE[str(year)] = df
     return out_path
 
 def get_available_years():
@@ -139,21 +145,25 @@ def get_available_years():
             years.append(int(m.group(1)))
     return sorted(years, reverse=True)
 
-@st.cache_data(show_spinner=False)
 def load_year_data(year):
-    """특정 연도 예산 데이터 로드 (이미 정제된 CSV를 온전히 로드)"""
+    """특정 연도 예산 데이터 로드 및 컬럼 안전성 자동 보장"""
+    year_key = str(year)
+    if year_key in _MEMORY_CACHE:
+        return _MEMORY_CACHE[year_key]
+
     ensure_data_dir()
     filepath = os.path.join(DATA_DIR, f"budget_{year}.csv")
     if not os.path.exists(filepath):
-        if str(year) == "2026" and os.path.exists(TEMP_DOC_PATH):
+        if year_key == "2026" and os.path.exists(TEMP_DOC_PATH):
             df = load_raw_csv(TEMP_DOC_PATH)
             save_processed_csv(df, 2026)
             return df
         return pd.DataFrame()
         
-    # 이미 정제된 파일은 재정제 없이 온전히 수집
-    df = read_csv_robust(filepath)
-    return df
+    df_raw = read_csv_robust(filepath)
+    df_clean = clean_budget_dataframe(df_raw)
+    _MEMORY_CACHE[year_key] = df_clean
+    return df_clean
 
 def save_uploaded_budget_file(file_buffer, year):
     """업로드된 CSV 파일을 정제 후 저장"""
@@ -163,10 +173,12 @@ def save_uploaded_budget_file(file_buffer, year):
 
 def delete_year_data(year):
     """특정 연도 데이터 안전 삭제"""
-    ensure_data_dir()
+    year_key = str(year)
+    if year_key in _MEMORY_CACHE:
+        del _MEMORY_CACHE[year_key]
+        
     filepath = os.path.join(DATA_DIR, f"budget_{year}.csv")
     if os.path.exists(filepath):
         os.remove(filepath)
-        st.cache_data.clear()
         return True
     return False
