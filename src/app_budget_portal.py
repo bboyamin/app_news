@@ -291,11 +291,10 @@ with col_t2:
         key="btn_download_csv"
     )
 
-# 테이블 표출 (예산액 천원 단위 콤마, 포맷 적용)
+# 테이블 표출 (예산액 수치형 오른쪽 정렬 + 천원 단위 콤마 + 수치 정렬 지원)
 total_cnt = len(search_df)
 show_table_df = search_df[display_cols].head(200).copy()
-show_table_df['예산액 (천원)'] = show_table_df['예산액_num'].apply(lambda x: f"{int(x):,}")
-show_table_df = show_table_df[['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액 (천원)', '의무/재량구분']]
+show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
 
 if total_cnt > 200:
     st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
@@ -305,7 +304,11 @@ st.dataframe(
     use_container_width=True,
     height=450,
     column_config={
-        "예산액 (천원)": st.column_config.TextColumn("예산액 (천원)", help="천원 단위 콤마 표기"),
+        "예산액_num": st.column_config.NumberColumn(
+            "예산액 (천원)",
+            format="%,d",
+            help="천원 단위 콤마 표기 (오른쪽 정렬)",
+        ),
         "산출근거식": st.column_config.TextColumn("산출근거 수식 (단가*수량)", width="medium")
     }
 )
