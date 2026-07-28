@@ -265,10 +265,8 @@ with col_m2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ==========================================
-# 5. 검색 결과 테이블 및 엑셀 다운로드
-# ==========================================
-display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액', '의무/재량구분']
+# 검색 결과 테이블용 컬럼 정의
+display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액_num', '의무/재량구분']
 
 col_t1, col_t2 = st.columns([4, 1])
 with col_t1:
@@ -278,8 +276,12 @@ with col_t2:
     safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
     download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
     
-    # UTF-8-SIG 바이너리 바이트 페이로드 생성 (엑셀 자동 인식 100%)
-    csv_bytes = search_df[display_cols].to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+    # 엑셀 다운로드용 데이터 생성 (예산액 천원 콤마 포맷 적용)
+    download_df = search_df[display_cols].copy()
+    download_df['예산액(천원)'] = download_df['예산액_num'].apply(lambda x: f"{int(x):,}")
+    download_df = download_df.drop(columns=['예산액_num'])
+    
+    csv_bytes = download_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
     
     st.download_button(
         label="📥 엑셀/CSV 다운로드",
@@ -289,9 +291,11 @@ with col_t2:
         key="btn_download_csv"
     )
 
-# 테이블 표출 (브라우저 웹소켓 과부하 100% 차단용 쾌속 200건 표출)
+# 테이블 표출 (예산액 천원 단위 콤마, 포맷 적용)
 total_cnt = len(search_df)
-show_table_df = search_df[display_cols].head(200)
+show_table_df = search_df[display_cols].head(200).copy()
+show_table_df['예산액 (천원)'] = show_table_df['예산액_num'].apply(lambda x: f"{int(x):,}")
+show_table_df = show_table_df[['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액 (천원)', '의무/재량구분']]
 
 if total_cnt > 200:
     st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
@@ -301,7 +305,7 @@ st.dataframe(
     use_container_width=True,
     height=450,
     column_config={
-        "예산액": st.column_config.NumberColumn("예산액 (천원)", format="%d"),
+        "예산액 (천원)": st.column_config.TextColumn("예산액 (천원)", help="천원 단위 콤마 표기"),
         "산출근거식": st.column_config.TextColumn("산출근거 수식 (단가*수량)", width="medium")
     }
 )
