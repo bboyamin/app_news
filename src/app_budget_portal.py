@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import data_manager
 
 # ==========================================
-# 0. 애플리케이션 기본 설정 & 미니멀 테마
+# 0. 애플리케이션 환경 설정 및 미니멀 테마
 # ==========================================
 st.set_page_config(
     page_title="스마트 세출 예산서 통합 검색 포털",
@@ -80,7 +80,7 @@ st.markdown("""
         color: #1e3a8a;
     }
 
-    /* 산출근거 수식 강조 카드 */
+    /* 산출근거 수식 카드 */
     .detail-box {
         background: #ffffff;
         border-left: 4px solid #0d9488;
@@ -106,7 +106,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. 사이드바 - 연도 선택 및 CSV 직접 업로드
+# 1. 사이드바 - 회계연도 선택 & CSV 업로드 관리
 # ==========================================
 st.sidebar.markdown("## 🔍 예산 검색 설정")
 
@@ -120,28 +120,28 @@ selected_year = st.sidebar.selectbox(
     index=0
 )
 
-# 데이터 로드 (RAM 캐싱)
+# 데이터 로드 (RAM 캐싱 적용)
 df_year = data_manager.load_year_data(selected_year)
 
-# 사이드바: 최신 예산서 CSV 업로드 (단정하게 expander로 수용)
+# 사이드바: 최신 예산서 CSV 직접 업로드 모듈
 st.sidebar.markdown("---")
 with st.sidebar.expander("📤 [관리자] 새 예산서 CSV 업로드", expanded=False):
-    st.caption("예산편성 후 최종 합본예산서 CSV 파일을 업로드하시면 연도별로 자동 저장·반영됩니다.")
+    st.caption("예산편성 후 최종 합본예산서 CSV 파일을 업로드하시면 0.5초 만에 연도별로 자동 정제·적용됩니다.")
     upload_year = st.number_input("등록할 연도", min_value=2020, max_value=2035, value=selected_year+1, step=1)
-    uploaded_file = st.file_uploader("CSV 파일 선택", type=["csv"])
+    uploaded_file = st.file_uploader("합본예산서 CSV 파일 선택", type=["csv"])
     
     if uploaded_file is not None:
-        if st.button("💾 데이터 저장 및 바로 적용", type="primary", use_container_width=True):
+        if st.button("💾 데이터 자동 정제 및 저장 적용", type="primary", use_container_width=True):
             try:
                 cnt = data_manager.save_uploaded_budget_file(uploaded_file, upload_year)
-                st.success(f"🎉 {upload_year}년 예산서 {cnt:,}건 등록 완료!")
+                st.success(f"🎉 {upload_year}년 예산서 {cnt:,}건 무결 정제 등록 완료!")
                 st.rerun()
             except Exception as e:
-                st.error(f"⚠️ 업로드 실패: {e}")
+                st.error(f"⚠️ 업로드 정제 실패: {e}")
 
     # 등록된 연도 목록 및 삭제
     st.markdown("---")
-    st.caption("📂 저장된 연도별 데이터 목록")
+    st.caption("📂 저장된 연도별 예산서 목록")
     for y in available_years:
         col_y1, col_y2 = st.columns([3, 1])
         col_y1.write(f"• {y}년 예산서")
@@ -151,32 +151,31 @@ with st.sidebar.expander("📤 [관리자] 새 예산서 CSV 업로드", expande
             st.rerun()
 
 # ==========================================
-# 2. 메인 헤더
+# 2. 메인 페이지 헤더
 # ==========================================
 st.markdown(f"""
 <div class="search-header">
     <div class="search-title">🔍 {selected_year}년 세출 예산서 스마트 통합 검색</div>
-    <div class="search-subtitle">부서명, 사업명, 세목, 산출근거식 키워드를 검색하면 단가 수식과 예산 내역을 1초 만에 찾아줍니다.</div>
+    <div class="search-subtitle">부서명, 세부사업명, 통계목, 산출근거 수식을 입력하여 예산 내역과 단가 수식을 1초 만에 확인하세요.</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 간편 필터 바 (회계 / 부서)
+# 3. 드롭다운 필터 바 (회계구분 / 소관부서)
 # ==========================================
-# 회계명 정제: '회계'로 끝나는 정상 회계명만 필터링하고 예산 규모 순서(내림차순) 정렬
+# 회계명 정제: '회계'로 끝나는 정제된 명칭을 예산 규모 내림차순으로 정렬
 valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
-acct_budget_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
-all_accts = ["전체"] + acct_budget_order
+acct_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
+all_accts = ["전체"] + acct_order
 
-# 부서명 정제: 숫자/통계목 코드('201-01' 등) 원천 차단 및 가나다순(처인구, 기흥구, 수지구, 시청 본청 부서 그룹화) 정렬
-raw_depts = df_year['부서명'].dropna().unique()
-clean_dept_list = [
-    str(d).strip() for d in raw_depts 
+# 소관 부서 정제: 숫자 코드를 완전 배제하고 가나다 순(처인구, 기흥구, 수지구, 시청 본청 부서 그룹화) 정렬
+raw_dept_list = [
+    str(d).strip() for d in df_year['부서명'].dropna().unique() 
     if str(d).strip() not in ['0', '-', 'nan', 'N/A', ''] 
-    and not re.match(r'^\d', str(d).strip()) # '201-01' 등 숫자로 시작하는 코드 완전 제거
+    and not re.match(r'^\d', str(d).strip())
 ]
-sorted_depts = sorted(list(set(clean_dept_list)))
-all_depts = ["전체"] + sorted_depts
+dept_order = sorted(list(set(raw_dept_list)))
+all_depts = ["전체"] + dept_order
 
 col_f1, col_f2 = st.columns(2)
 
@@ -184,9 +183,9 @@ with col_f1:
     sel_acct = st.selectbox("🏛️ 회계구분 선택 (예산 규모순)", all_accts, index=0)
 
 with col_f2:
-    sel_dept = st.selectbox("🏢 소관 부서 선택 (가나다순 / '처인구' 키보드 입력 시 즉시 탐색)", all_depts, index=0)
+    sel_dept = st.selectbox("🏢 소관 부서 선택 (가나다순 / 부서명 키보드 입력 시 자동 완성)", all_depts, index=0)
 
-# 필터 1차 적용
+# 필터 적용
 filtered_df = df_year.copy()
 if sel_acct != "전체":
     filtered_df = filtered_df[filtered_df['회계명'] == sel_acct]
@@ -198,8 +197,8 @@ if sel_dept != "전체":
 # ==========================================
 st.markdown("---")
 search_keyword = st.text_input(
-    "🔎 예산 검색어 입력", 
-    placeholder="검색할 단어를 입력하세요 (예: 시민소통, 주차장, 수당, 마스크, 연수, 용역, 회계과...)"
+    "🔎 예산 통합 검색어 입력", 
+    placeholder="검색할 단어를 입력하세요 (예: 시민소통, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)"
 )
 
 search_df = filtered_df.copy()
@@ -238,7 +237,7 @@ with col_m2:
 with col_m3:
     st.markdown(f"""
     <div class="metric-badge">
-        <div class="metric-label">검색 대상 회계연도</div>
+        <div class="metric-label">조회 대상 회계연도</div>
         <div class="metric-value">{selected_year} 년도</div>
     </div>
     """, unsafe_allow_html=True)
@@ -284,11 +283,11 @@ st.dataframe(
 # ==========================================
 if not search_df.empty:
     st.markdown("---")
-    st.markdown("### 📄 산출근거 수식 상세 확인 카드")
+    st.markdown("### 📄 세부 산출근거 수식 확인 카드")
     
     sample_indices = search_df.index[:100]
     selected_idx = st.selectbox(
-        "상세 산출근거식을 볼 항목을 선택하세요",
+        "상세 산출근거식을 확인하실 항목을 선택하세요",
         options=sample_indices,
         format_func=lambda idx: f"[{search_df.loc[idx, '부서명']}] {search_df.loc[idx, '세부사업명']} - {search_df.loc[idx, '산출근거명']} ({data_manager.clean_num(search_df.loc[idx, '예산액']):,.0f} 천원)"
     )
@@ -302,7 +301,7 @@ if not search_df.empty:
         <p><b>• 정책사업:</b> {item['정책사업명']} &nbsp;|&nbsp; <b>• 단위사업:</b> {item['단위사업명']}</p>
         <p><b>• 회계구분:</b> {item['회계명']} &nbsp;|&nbsp; <b>• 목/통계목:</b> {item['편성목명']} ({item['통계목명']})</p>
         <p><b>• 의무/재량:</b> {item['의무/재량구분']} &nbsp;|&nbsp; <b>• 산출근거 항목:</b> {item['산출근거명']}</p>
-        <p><b>• 산출근거식:</b> <span class="formula-tag">{item['산출근거식']}</span></p>
+        <p><b>• 산출근거 수식:</b> <span class="formula-tag">{item['산출근거식']}</span></p>
         <p style="margin-bottom:0;"><b>• 예산 반영액:</b> <span style="font-size:18px; font-weight:700; color:#0f766e;">{budget_num:,.0f} 천원</span> ({budget_num/100000:,.2f} 억 원)</p>
     </div>
     """, unsafe_allow_html=True)

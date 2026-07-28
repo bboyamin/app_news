@@ -9,7 +9,7 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 TEMP_DOC_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp_docs", "합본예산서(세출)_산출근거별.csv")
 
 def ensure_data_dir():
-    """데이터 저장 디렉토리 생성 및 초기 2026년 데이터 세팅"""
+    """데이터 디렉토리 생성 및 초기 2026년 데이터 무결성 세팅"""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
     
@@ -35,12 +35,11 @@ def read_csv_robust(filepath_or_buffer):
                 low_memory=False, 
                 on_bad_lines='skip'
             )
-            if not df.empty and len(df.columns) > 3:
+            if not df.empty and len(df.columns) > 5:
                 return df
         except Exception:
             continue
             
-    # 최후 안전망: 디코딩 대체 로직 적용
     if hasattr(filepath_or_buffer, 'seek'):
         filepath_or_buffer.seek(0)
     return pd.read_csv(
@@ -51,23 +50,8 @@ def read_csv_robust(filepath_or_buffer):
         on_bad_lines='skip'
     )
 
-def load_raw_csv(filepath_or_buffer):
-    """CSV 파일 파싱 및 2단 헤더 정제 통합 모듈"""
-    df_raw = read_csv_robust(filepath_or_buffer)
-
-    if df_raw.empty:
-        raise ValueError("CSV 파일에 읽을 수 있는 데이터가 없습니다.")
-
-    # 1행이 서브헤더 ('경정', '기정', '증감' 등)인지 확인하고 자동 제거
-    if df_raw.iloc[0].astype(str).str.contains("경정|기정|증감").any():
-        df = df_raw.iloc[1:].copy()
-    else:
-        df = df_raw.copy()
-        
-    return clean_budget_dataframe(df)
-
 def clean_num(val):
-    """숫자 및 금액 문자열 정제 함수"""
+    """숫자 및 금액 문자열 정제 (천원 단위 기본)"""
     if pd.isna(val) or val is None:
         return 0.0
     val_str = str(val).replace(",", "").replace("원", "").strip()
@@ -76,33 +60,40 @@ def clean_num(val):
     except:
         return 0.0
 
-def clean_budget_dataframe(df):
-    """예산 데이터프레임 고속 벡터화 정제 및 무결성 검증"""
-    df = df.copy()
+def clean_budget_dataframe(df_raw):
+    """예산 데이터프레임 단일 무결 정제 엔진 (재귀 없는 1회 정제)"""
+    df = df_raw.copy()
+    
+    # 0행이 서브헤더 ('경정', '기정', '증감' 등)인 경우 서브헤더 행 제외
+    if len(df) > 0 and df.iloc[0].astype(str).str.contains("경정|기정|증감").any():
+        df = df.iloc[1:].copy()
+        
+    # 컬럼명 공백 정돈
     df.columns = [str(c).strip() for c in df.columns]
     
-    # 회계연도 컬럼 처리
+    # 회계연도 컬럼 정제
     if '회계연도' in df.columns:
         yr_series = pd.to_numeric(df['회계연도'].astype(str).str.replace(',', '', regex=False), errors='coerce')
         df['회계연도'] = yr_series.ffill().bfill().fillna(2026).astype(int)
     else:
         df['회계연도'] = 2026
 
-    # 필수 텍스트 컬럼 기본값 정제
+    # 필수 텍스트 컬럼 정제 (NaN 방지)
     text_cols = ['예산구분', '분야명', '부문명', '위원회명', '정책사업명', '단위사업명', 
                  '회계명', '세부사업명', '부서명', '편성목명', '통계목명', '의무/재량구분', '산출근거명', '산출근거식']
     
     for col in text_cols:
         if col in df.columns:
             df[col] = df[col].fillna("-").astype(str).str.strip()
+            df[col] = df[col].replace({"nan": "-", "NaN": "-", "None": "-"})
         else:
             df[col] = "-"
 
-    # 진성 오염 행만 제거 (부서명과 세부사업명이 동시에 '0'이거나 아예 비어있는 잘못된 소계 행)
-    invalid_mask = (df['부서명'].isin(['0', 'nan', 'N/A', ''])) & (df['세부사업명'].isin(['0', 'nan', 'N/A', '']))
+    # 진성 오염 행만 제거 (부서명과 세부사업명이 동시에 비어있는 행만 제거)
+    invalid_mask = (df['부서명'].isin(['-', '0', 'N/A', ''])) & (df['세부사업명'].isin(['-', '0', 'N/A', '']))
     df = df[~invalid_mask].copy()
 
-    # 금액 컬럼 벡터화 고속 변환
+    # 금액 컬럼 변환 (천원 / 원 / 억원)
     amount_cols = ['예산액', '기정액', '비교증감', '국고보조금', '균특보조금', '기금보조금', 
                    '특별교부세', '광역보조금', '특별조정교부금', '자체재원']
     
@@ -113,15 +104,23 @@ def clean_budget_dataframe(df):
         else:
             df[col + '_num'] = 0.0
 
-    # 예산액 억 원 단위 보조 컬럼 생성
+    # 보조 금액 컬럼 계산 (천원 기준)
+    df['예산액_원'] = df['예산액_num'] * 1000.0
     df['예산액_억원'] = df['예산액_num'] / 100000.0
     df['기정액_억원'] = df['기정액_num'] / 100000.0
     df['비교증감_억원'] = df['비교증감_num'] / 100000.0
     
     return df
 
+def load_raw_csv(filepath_or_buffer):
+    """CSV 파싱 및 정제 통합 함수 (업로드 시 1회 호출)"""
+    df_raw = read_csv_robust(filepath_or_buffer)
+    if df_raw.empty:
+        raise ValueError("CSV 파일에 읽을 수 있는 데이터가 없습니다.")
+    return clean_budget_dataframe(df_raw)
+
 def save_processed_csv(df, year):
-    """정제된 데이터프레임을 연도별 UTF-8-SIG 표준 CSV로 저장 (엑셀 및 파이썬 호환 100%)"""
+    """정제 완료된 데이터프레임을 연도별 UTF-8-SIG 표준 CSV로 저장"""
     ensure_data_dir()
     df['회계연도'] = int(year)
     out_path = os.path.join(DATA_DIR, f"budget_{year}.csv")
@@ -142,7 +141,7 @@ def get_available_years():
 
 @st.cache_data(show_spinner=False)
 def load_year_data(year):
-    """특정 연도 예산 데이터 로드 (다중 인코딩 및 RAM 캐싱 적용)"""
+    """특정 연도 예산 데이터 로드 (이미 정제된 CSV를 온전히 로드)"""
     ensure_data_dir()
     filepath = os.path.join(DATA_DIR, f"budget_{year}.csv")
     if not os.path.exists(filepath):
@@ -152,26 +151,12 @@ def load_year_data(year):
             return df
         return pd.DataFrame()
         
+    # 이미 정제된 파일은 재정제 없이 온전히 수집
     df = read_csv_robust(filepath)
-    return clean_budget_dataframe(df)
-
-@st.cache_data(show_spinner=False)
-def load_all_years_data():
-    """전체 연도 데이터 병합 로드 (Streamlit RAM 캐싱 적용)"""
-    years = get_available_years()
-    if not years:
-        return pd.DataFrame()
-    dfs = []
-    for y in years:
-        df = load_year_data(y)
-        if not df.empty:
-            dfs.append(df)
-    if dfs:
-        return pd.concat(dfs, ignore_index=True)
-    return pd.DataFrame()
+    return df
 
 def save_uploaded_budget_file(file_buffer, year):
-    """업로드된 CSV 파일을 무적 로더로 파싱하고 연도별 저장소에 보관"""
+    """업로드된 CSV 파일을 정제 후 저장"""
     df = load_raw_csv(file_buffer)
     save_processed_csv(df, year)
     return len(df)
