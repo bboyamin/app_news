@@ -162,15 +162,21 @@ st.markdown(f"""
 # ==========================================
 # 3. 간편 필터 바 (회계 / 부서)
 # ==========================================
-col_f1, col_f2 = st.columns(2)
+# 회계명 정제: '회계'로 끝나는 정상 회계명만 필터링하고 예산 규모 순서(내림차순) 정렬
+valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
+acct_budget_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
+all_accts = ["전체"] + acct_budget_order
+
+# 부서명 정제: 숫자/이상치 제외 후 예산 규모 순서(내림차순) 정렬
+valid_dept_df = df_year[~df_year['부서명'].isin(['0', '-', 'nan', 'N/A'])]
+dept_budget_order = valid_dept_df.groupby('부서명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
+all_depts = ["전체"] + dept_budget_order
 
 with col_f1:
-    all_accts = ["전체"] + sorted(df_year['회계명'].unique().tolist())
-    sel_acct = st.selectbox("🏛️ 회계구분 선택", all_accts, index=0)
+    sel_acct = st.selectbox("🏛️ 회계구분 선택 (예산 규모순)", all_accts, index=0)
 
 with col_f2:
-    all_depts = ["전체"] + sorted(df_year['부서명'].unique().tolist())
-    sel_dept = st.selectbox("🏢 소관 부서 선택", all_depts, index=0)
+    sel_dept = st.selectbox("🏢 소관 부서 선택 (예산 규모순)", all_depts, index=0)
 
 # 필터 1차 적용
 filtered_df = df_year.copy()
