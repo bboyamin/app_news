@@ -275,11 +275,12 @@ with col_t2:
         use_container_width=True
     )
 
-# 테이블 표출 (검색어가 없을 때는 쾌속 표출용 300건 표출)
-show_table_df = search_df[display_cols]
-if not search_keyword.strip() and len(show_table_df) > 300:
-    st.caption("💡 검색어를 입력하시면 전체 예산서 데이터에서 즉시 검색됩니다.")
-    show_table_df = show_table_df.head(300)
+# 테이블 표출 (브라우저 웹소켓 과부하 100% 차단용 쾌속 200건 표출)
+total_cnt = len(search_df)
+show_table_df = search_df[display_cols].head(200)
+
+if total_cnt > 200:
+    st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
 
 st.dataframe(
     show_table_df,
