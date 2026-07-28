@@ -298,20 +298,22 @@ if not search_df.empty:
     st.markdown("---")
     st.markdown("### 📄 세부 산출근거 수식 확인 카드")
     
-    sample_indices = search_df.index[:100]
+    # 초고속 렌더링을 위해 상위 50개 항목을 사전 딕셔너리로 고속 추출
+    sample_records = search_df[['부서명', '세부사업명', '산출근거명', '예산액_num', '정책사업명', '단위사업명', '회계명', '편성목명', '통계목명', '의무/재량구분', '산출근거식', '예산구분']].head(50).to_dict('records')
+    
     selected_idx = st.selectbox(
         "상세 산출근거식을 확인하실 항목을 선택하세요",
-        options=sample_indices,
-        format_func=lambda idx: f"[{search_df.loc[idx, '부서명']}] {search_df.loc[idx, '세부사업명']} - {search_df.loc[idx, '산출근거명']} ({data_manager.clean_num(search_df.loc[idx, '예산액']):,.0f} 천원)"
+        options=list(range(len(sample_records))),
+        format_func=lambda i: f"[{sample_records[i]['부서명']}] {sample_records[i]['세부사업명']} - {sample_records[i]['산출근거명']} ({sample_records[i]['예산액_num']:,.0f} 천원)"
     )
     
-    item = search_df.loc[selected_idx]
-    budget_num = data_manager.clean_num(item['예산액'])
+    item = sample_records[selected_idx]
+    budget_num = item['예산액_num']
     
     st.markdown(f"""
     <div class="detail-box">
         <h4 style="margin-top:0; color:#1e3a8a;">[{item['부서명']}] {item['세부사업명']}</h4>
-        <p><b>• 정책사업:</b> {item['정책사업명']} &nbsp;|&nbsp; <b>• 단위사업:</b> {item['단위사업명']}</p>
+        <p><b>• 예산구분:</b> {item['예산구분']} &nbsp;|&nbsp; <b>• 정책사업:</b> {item['정책사업명']} &nbsp;|&nbsp; <b>• 단위사업:</b> {item['단위사업명']}</p>
         <p><b>• 회계구분:</b> {item['회계명']} &nbsp;|&nbsp; <b>• 목/통계목:</b> {item['편성목명']} ({item['통계목명']})</p>
         <p><b>• 의무/재량:</b> {item['의무/재량구분']} &nbsp;|&nbsp; <b>• 산출근거 항목:</b> {item['산출근거명']}</p>
         <p><b>• 산출근거 수식:</b> <span class="formula-tag">{item['산출근거식']}</span></p>
