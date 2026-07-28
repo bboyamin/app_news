@@ -221,9 +221,13 @@ if search_keyword.strip():
         search_df['부서명'].str.contains(kw, case=False, na=False) |
         search_df['세부사업명'].str.contains(kw, case=False, na=False) |
         search_df['정책사업명'].str.contains(kw, case=False, na=False) |
+        search_df['단위사업명'].str.contains(kw, case=False, na=False) |
+        search_df['편성목명'].str.contains(kw, case=False, na=False) |
         search_df['통계목명'].str.contains(kw, case=False, na=False) |
         search_df['산출근거명'].str.contains(kw, case=False, na=False) |
-        search_df['산출근거식'].str.contains(kw, case=False, na=False)
+        search_df['산출근거식'].str.contains(kw, case=False, na=False) |
+        search_df['분야명'].str.contains(kw, case=False, na=False) |
+        search_df['부문명'].str.contains(kw, case=False, na=False)
     )
     search_df = search_df[mask]
 
