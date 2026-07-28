@@ -171,11 +171,11 @@ valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
 acct_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
 all_accts = ["전체"] + acct_order
 
-# 소관 부서 정제: CSV 데이터 원본 부서 순서 그대로 유지 (이상치 '0', '-', 'nan', 'N/A', 숫자코드 제외)
+# 소관 부서 정제: CSV 데이터 원본 167개 부서 100% 보존 (4차산업융합과 등 포함, 이상치 '0', '-', 'nan', 'N/A'만 제외)
 csv_dept_list = []
 for d in df_year['부서명'].dropna().unique():
     d_str = str(d).strip()
-    if d_str and d_str not in ['0', '-', 'nan', 'N/A'] and not re.match(r'^\d', d_str):
+    if d_str and d_str not in ['0', '-', 'nan', 'N/A']:
         if d_str not in csv_dept_list:
             csv_dept_list.append(d_str)
 
