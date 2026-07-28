@@ -139,16 +139,19 @@ with st.sidebar.expander("📤 [관리자] 새 예산서 CSV 업로드", expande
             except Exception as e:
                 st.error(f"⚠️ 업로드 정제 실패: {e}")
 
-    # 등록된 연도 목록 및 삭제
+    # 등록된 연도 목록 및 안전 삭제 모듈
     st.markdown("---")
     st.caption("📂 저장된 연도별 예산서 목록")
     for y in available_years:
         col_y1, col_y2 = st.columns([3, 1])
         col_y1.write(f"• {y}년 예산서")
         if col_y2.button("삭제", key=f"del_{y}"):
-            data_manager.delete_year_data(y)
-            st.toast(f"{y}년 데이터 삭제 완료")
-            st.rerun()
+            if len(available_years) <= 1:
+                st.sidebar.warning("⚠️ 최소 1개 이상의 예산서 데이터가 유지되어야 합니다.")
+            else:
+                data_manager.delete_year_data(y)
+                st.sidebar.success(f"🗑️ {y}년 예산서 데이터 삭제 완료!")
+                st.rerun()
 
 # ==========================================
 # 2. 메인 페이지 헤더

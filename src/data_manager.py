@@ -162,7 +162,8 @@ def save_uploaded_budget_file(file_buffer, year):
     return len(df)
 
 def delete_year_data(year):
-    """특정 연도 데이터 삭제"""
+    """특정 연도 데이터 안전 삭제"""
+    ensure_data_dir()
     filepath = os.path.join(DATA_DIR, f"budget_{year}.csv")
     if os.path.exists(filepath):
         os.remove(filepath)
