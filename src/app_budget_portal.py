@@ -292,23 +292,21 @@ with col_t2:
     )
 
 # 테이블 표출 (다중 행 선택 지원 + 예산액 오른쪽 정렬 + 실시간 합계 상단 표출)
+# 테이블 표출 (다중 행 및 셀 선택 지원 + 예산액 오른쪽 정렬 + 실시간 합계 표출)
 total_cnt = len(search_df)
 show_table_df = search_df[display_cols].head(200).copy()
 show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
 
-# 선택된 항목 실시간 합계 표출용 컨테이너 (테이블 최상단배치)
-sum_container = st.empty()
-
 # 멀리 떨어진 항목 다중 선택 팁 안내
-st.caption("💡 **다중 선택 팁**: 떨어져 있는 항목들을 여러 개 선택하시려면 **맥(Mac)은 `Cmd(⌘)`**, **윈도우는 `Ctrl`** 키를 누른 채 마우스로 각 행을 클릭하세요.")
+st.caption("💡 **다중 선택 팁**: 원하는 예산 행을 마우스로 클릭해 보세요. 떨어진 항목들을 복수 선택하려면 **맥(Mac)은 `Cmd(⌘)`**, **윈도우는 `Ctrl`** 키를 누른 채 클릭하세요.")
 
-# 테이블 다중 클릭/선택 이벤트 수집
+# 테이블 다중 클릭/선택 이벤트 수집 (행 및 셀 선택 통합 지원)
 event = st.dataframe(
     show_table_df,
     use_container_width=True,
     height=450,
     on_select="rerun",
-    selection_mode="multi-row",
+    selection_mode=["multi-row", "multi-cell"],
     column_config={
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
@@ -319,17 +317,28 @@ event = st.dataframe(
     }
 )
 
-# 상단 컨테이너에 실시간 예산 합계 전광판 표출
-selected_rows = event.selection.get("rows", [])
+# 선택된 행/셀 번호 추출
+selected_rows = list(event.selection.get("rows", []))
+for cell in event.selection.get("cells", []):
+    if len(cell) > 0 and cell[0] not in selected_rows:
+        selected_rows.append(cell[0])
+
+# 실시간 예산 합계 전광판 표출 (선택 전/후 상태 즉시 안내)
 if selected_rows:
     sel_df = show_table_df.iloc[selected_rows]
     sum_cheon = sel_df['예산액_num'].sum()
     sum_eok = sum_cheon / 100000.0
-    sum_container.markdown(f"""
-    <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 14px 20px; border-radius: 10px; margin-bottom: 12px;">
+    st.markdown(f"""
+    <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 14px 20px; border-radius: 10px; margin-top: 10px; margin-bottom: 15px;">
         <span style="font-size: 16px; font-weight: 700; color: #15803d;">✨ 선택된 {len(selected_rows)}개 예산 항목 합계:</span>
         <span style="font-size: 22px; font-weight: 800; color: #166534; margin-left: 10px;">{sum_cheon:,.0f} 천원</span>
         <span style="font-size: 16px; font-weight: 600; color: #15803d; margin-left: 6px;">({sum_eok:,.2f} 억 원)</span>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+    <div style="background-color: #f8fafc; border: 1px dashed #94a3b8; padding: 10px 16px; border-radius: 8px; margin-top: 10px; margin-bottom: 15px; color: #64748b; font-size: 14px;">
+        💡 <b>실시간 예산 합계 계산기</b>: 위 테이블에서 합산을 원하시는 항목 행을 마우스로 클릭하시면 선택된 항목들의 예산 합계가 이곳에 실시간으로 즉시 표시됩니다.
     </div>
     """, unsafe_allow_html=True)
 
