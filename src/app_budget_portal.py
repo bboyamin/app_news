@@ -291,54 +291,27 @@ with col_t2:
         key="btn_download_csv"
     )
 
-# 테이블 표출 (체크박스 전용 컬럼 탑재로 떨어진 항목 100% 다중 선택 지원)
+# 테이블 표출 (오른쪽 정렬 + 천원 콤마 표기 적용)
 total_cnt = len(search_df)
 show_table_df = search_df[display_cols].head(200).copy()
 show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
 
-# 맨 앞열에 '선택' 체크박스 컬럼 탑재
-show_table_df.insert(0, '선택', False)
+if total_cnt > 200:
+    st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
 
-st.caption("💡 **다중 선택 방법**: 합산하고 싶으신 예산 항목 좌측의 **`[ ]` 체크박스**를 마우스로 자유롭게 클릭하세요. (떨어져 있는 예산도 자유롭게 복수 체크 가능합니다)")
-
-# 체크박스 대화형 테이블 (편집 가능 컬럼은 '선택' 체크박스로 제한)
-edited_df = st.data_editor(
+st.dataframe(
     show_table_df,
     use_container_width=True,
     height=450,
-    hide_index=True,
     column_config={
-        "선택": st.column_config.CheckboxColumn("선택", help="합산할 예산 항목 체크박스", default=False),
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
             format="%,d",
             help="천원 단위 콤마 표기 (오른쪽 정렬)",
         ),
         "산출근거식": st.column_config.TextColumn("산출근거 수식 (단가*수량)", width="medium")
-    },
-    disabled=[col for col in show_table_df.columns if col != '선택']
+    }
 )
-
-# 체크된 항목들 실시간 예산 합계 즉시 자동 계산
-selected_mask = edited_df['선택'] == True
-selected_cnt = selected_mask.sum()
-
-if selected_cnt > 0:
-    sum_cheon = edited_df.loc[selected_mask, '예산액_num'].sum()
-    sum_eok = sum_cheon / 100000.0
-    st.markdown(f"""
-    <div style="background-color: #f0fdf4; border: 2px solid #22c55e; padding: 14px 20px; border-radius: 10px; margin-top: 10px; margin-bottom: 15px;">
-        <span style="font-size: 16px; font-weight: 700; color: #15803d;">✨ 선택된 {selected_cnt}개 예산 항목 합계:</span>
-        <span style="font-size: 22px; font-weight: 800; color: #166534; margin-left: 10px;">{sum_cheon:,.0f} 천원</span>
-        <span style="font-size: 16px; font-weight: 600; color: #15803d; margin-left: 6px;">({sum_eok:,.2f} 억 원)</span>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-    <div style="background-color: #f8fafc; border: 1px dashed #94a3b8; padding: 10px 16px; border-radius: 8px; margin-top: 10px; margin-bottom: 15px; color: #64748b; font-size: 14px;">
-        💡 <b>실시간 예산 합계 계산기</b>: 위 테이블 좌측의 <b><code>[ ] 선택</code> 체크박스</b>를 마우스로 체크하시면 선택된 항목들의 예산 합계가 이곳에 실시간으로 즉시 표시됩니다.
-    </div>
-    """, unsafe_allow_html=True)
 
 # ==========================================
 # 6. 개별 항목 세부 산출근거 수식 팝업 카드
