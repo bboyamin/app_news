@@ -216,20 +216,33 @@ search_keyword = st.text_input(
 
 search_df = filtered_df.copy()
 if search_keyword.strip():
-    kw = search_keyword.strip()
-    mask = (
-        search_df['부서명'].str.contains(kw, case=False, na=False) |
-        search_df['세부사업명'].str.contains(kw, case=False, na=False) |
-        search_df['정책사업명'].str.contains(kw, case=False, na=False) |
-        search_df['단위사업명'].str.contains(kw, case=False, na=False) |
-        search_df['편성목명'].str.contains(kw, case=False, na=False) |
-        search_df['통계목명'].str.contains(kw, case=False, na=False) |
-        search_df['산출근거명'].str.contains(kw, case=False, na=False) |
-        search_df['산출근거식'].str.contains(kw, case=False, na=False) |
-        search_df['분야명'].str.contains(kw, case=False, na=False) |
-        search_df['부문명'].str.contains(kw, case=False, na=False)
-    )
-    search_df = search_df[mask]
+    kw_raw = search_keyword.strip()
+    kw_nospace = kw_raw.replace(" ", "")
+    tokens = [t for t in kw_raw.split() if len(t) > 0]
+    
+    target_fields = ['부서명', '세부사업명', '정책사업명', '단위사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '분야명', '부문명']
+    
+    # 1단계: 원문 또는 띄어쓰기 제거(Space-Insensitive) 조건
+    final_mask = pd.Series(False, index=search_df.index)
+    
+    for col in target_fields:
+        # A) 원문 포함 검색
+        mask_a = search_df[col].str.contains(kw_raw, case=False, na=False)
+        # B) 띄어쓰기 무시 상호 검색 ('정보화 교육' ↔ '정보화교육' 100% 매칭)
+        mask_b = search_df[col].astype(str).str.replace(" ", "", regex=False).str.contains(kw_nospace, case=False, na=False)
+        
+        col_mask = mask_a | mask_b
+        
+        # C) 단어 조합 교집합 검색 (단어가 2개 이상일 때 '정보화'와 '교육'이 모두 들어있는 항목 탐색)
+        if len(tokens) > 1:
+            token_mask = pd.Series(True, index=search_df.index)
+            for t in tokens:
+                token_mask = token_mask & search_df[col].str.contains(t, case=False, na=False)
+            col_mask = col_mask | token_mask
+            
+        final_mask = final_mask | col_mask
+        
+    search_df = search_df[final_mask]
 
 # 검색 결과 요약 메트릭 바 (예산 합계 카드 제거 및 2분할 배치)
 col_m1, col_m2 = st.columns(2)
