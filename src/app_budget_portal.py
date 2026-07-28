@@ -172,6 +172,8 @@ valid_dept_df = df_year[~df_year['부서명'].isin(['0', '-', 'nan', 'N/A'])]
 dept_budget_order = valid_dept_df.groupby('부서명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
 all_depts = ["전체"] + dept_budget_order
 
+col_f1, col_f2 = st.columns(2)
+
 with col_f1:
     sel_acct = st.selectbox("🏛️ 회계구분 선택 (예산 규모순)", all_accts, index=0)
 
