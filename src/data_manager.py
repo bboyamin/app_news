@@ -21,24 +21,44 @@ def ensure_data_dir():
         except Exception as e:
             print(f"Error seeding 2026 budget data: {e}")
 
-def load_raw_csv(filepath_or_buffer):
-    """CSV 파일 인코딩 및 멀티 레벨 헤더 자동 처리 파싱 (속도 최적화)"""
-    encodings = ["utf-8", "utf-8-sig", "cp949", "euc-kr"]
-    df_raw = None
+def read_csv_robust(filepath_or_buffer):
+    """모든 한글 CSV 인코딩(UTF-8-SIG, CP949, EUC-KR, UTF-8, ANSI) 무적 수집 파서"""
+    encodings = ["utf-8-sig", "cp949", "euc-kr", "utf-8", "ansi"]
     
     for enc in encodings:
         try:
             if hasattr(filepath_or_buffer, 'seek'):
                 filepath_or_buffer.seek(0)
-            df_raw = pd.read_csv(filepath_or_buffer, encoding=enc, low_memory=False)
-            break
+            df = pd.read_csv(
+                filepath_or_buffer, 
+                encoding=enc, 
+                low_memory=False, 
+                on_bad_lines='skip'
+            )
+            if not df.empty and len(df.columns) > 3:
+                return df
         except Exception:
             continue
             
-    if df_raw is None:
-        raise ValueError("CSV 파일 인코딩을 읽을 수 없습니다 (UTF-8 / CP949 지원)")
+    # 최후 안전망: 디코딩 대체 로직 적용
+    if hasattr(filepath_or_buffer, 'seek'):
+        filepath_or_buffer.seek(0)
+    return pd.read_csv(
+        filepath_or_buffer, 
+        encoding="utf-8", 
+        encoding_errors="replace", 
+        low_memory=False, 
+        on_bad_lines='skip'
+    )
 
-    # 1행이 서브헤더 ('경정', '기정', '증감' 등)인지 확인하고 처리
+def load_raw_csv(filepath_or_buffer):
+    """CSV 파일 파싱 및 2단 헤더 정제 통합 모듈"""
+    df_raw = read_csv_robust(filepath_or_buffer)
+
+    if df_raw.empty:
+        raise ValueError("CSV 파일에 읽을 수 있는 데이터가 없습니다.")
+
+    # 1행이 서브헤더 ('경정', '기정', '증감' 등)인지 확인하고 자동 제거
     if df_raw.iloc[0].astype(str).str.contains("경정|기정|증감").any():
         df = df_raw.iloc[1:].copy()
     else:
@@ -46,8 +66,19 @@ def load_raw_csv(filepath_or_buffer):
         
     return clean_budget_dataframe(df)
 
+def clean_num(val):
+    """숫자 및 금액 문자열 정제 함수"""
+    if pd.isna(val) or val is None:
+        return 0.0
+    val_str = str(val).replace(",", "").replace("원", "").strip()
+    try:
+        return float(val_str)
+    except:
+        return 0.0
+
 def clean_budget_dataframe(df):
-    """예산 데이터프레임 고속 벡터화 정제"""
+    """예산 데이터프레임 고속 벡터화 정제 및 무결성 검증"""
+    df = df.copy()
     df.columns = [str(c).strip() for c in df.columns]
     
     # 회계연도 컬럼 처리
@@ -57,7 +88,7 @@ def clean_budget_dataframe(df):
     else:
         df['회계연도'] = 2026
 
-    # 필수 텍스트 컬럼 기본값 처리
+    # 필수 텍스트 컬럼 기본값 정제
     text_cols = ['예산구분', '분야명', '부문명', '위원회명', '정책사업명', '단위사업명', 
                  '회계명', '세부사업명', '부서명', '편성목명', '통계목명', '의무/재량구분', '산출근거명', '산출근거식']
     
@@ -67,9 +98,9 @@ def clean_budget_dataframe(df):
         else:
             df[col] = "-"
 
-    # 오염 데이터 행 제거 ('0', '-', '7,200' 등 이상치 행 제거)
-    df = df[~df['부서명'].isin(['0', 'nan', 'N/A'])].copy()
-    df = df[~df['세부사업명'].isin(['0', 'nan', 'N/A'])].copy()
+    # 진성 오염 행만 제거 (부서명과 세부사업명이 동시에 '0'이거나 아예 비어있는 잘못된 소계 행)
+    invalid_mask = (df['부서명'].isin(['0', 'nan', 'N/A', ''])) & (df['세부사업명'].isin(['0', 'nan', 'N/A', '']))
+    df = df[~invalid_mask].copy()
 
     # 금액 컬럼 벡터화 고속 변환
     amount_cols = ['예산액', '기정액', '비교증감', '국고보조금', '균특보조금', '기금보조금', 
@@ -90,7 +121,7 @@ def clean_budget_dataframe(df):
     return df
 
 def save_processed_csv(df, year):
-    """정제된 데이터프레임을 연도별 CSV로 저장"""
+    """정제된 데이터프레임을 연도별 UTF-8-SIG 표준 CSV로 저장 (엑셀 및 파이썬 호환 100%)"""
     ensure_data_dir()
     df['회계연도'] = int(year)
     out_path = os.path.join(DATA_DIR, f"budget_{year}.csv")
@@ -108,20 +139,6 @@ def get_available_years():
         if m:
             years.append(int(m.group(1)))
     return sorted(years, reverse=True)
-
-def read_csv_robust(filepath_or_buffer):
-    """모든 한글 CSV 인코딩(UTF-8, CP949, EUC-KR)에 대응하는 무적 파일 로더"""
-    encodings = ["utf-8-sig", "cp949", "euc-kr", "utf-8"]
-    for enc in encodings:
-        try:
-            if hasattr(filepath_or_buffer, 'seek'):
-                filepath_or_buffer.seek(0)
-            return pd.read_csv(filepath_or_buffer, encoding=enc, low_memory=False)
-        except Exception:
-            continue
-    if hasattr(filepath_or_buffer, 'seek'):
-        filepath_or_buffer.seek(0)
-    return pd.read_csv(filepath_or_buffer, encoding="utf-8", encoding_errors="replace", low_memory=False)
 
 @st.cache_data(show_spinner=False)
 def load_year_data(year):
@@ -154,7 +171,7 @@ def load_all_years_data():
     return pd.DataFrame()
 
 def save_uploaded_budget_file(file_buffer, year):
-    """업로드된 CSV 파일을 파싱하고 연도별 저장소에 보관"""
+    """업로드된 CSV 파일을 무적 로더로 파싱하고 연도별 저장소에 보관"""
     df = load_raw_csv(file_buffer)
     save_processed_csv(df, year)
     return len(df)
