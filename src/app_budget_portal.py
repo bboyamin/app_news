@@ -167,10 +167,15 @@ valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
 acct_budget_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
 all_accts = ["전체"] + acct_budget_order
 
-# 부서명 정제: CSV 원본 파일의 첫 등장 순서 그대로 유지 (이상치 '0', '-', 'nan', 'N/A' 제외)
-valid_dept_series = df_year['부서명'][~df_year['부서명'].isin(['0', '-', 'nan', 'N/A'])]
-csv_dept_order = [d for d in valid_dept_series.unique() if d and str(d).strip() != '-']
-all_depts = ["전체"] + csv_dept_order
+# 부서명 정제: 숫자/통계목 코드('201-01' 등) 원천 차단 및 가나다순(처인구, 기흥구, 수지구, 시청 본청 부서 그룹화) 정렬
+raw_depts = df_year['부서명'].dropna().unique()
+clean_dept_list = [
+    str(d).strip() for d in raw_depts 
+    if str(d).strip() not in ['0', '-', 'nan', 'N/A', ''] 
+    and not re.match(r'^\d', str(d).strip()) # '201-01' 등 숫자로 시작하는 코드 완전 제거
+]
+sorted_depts = sorted(list(set(clean_dept_list)))
+all_depts = ["전체"] + sorted_depts
 
 col_f1, col_f2 = st.columns(2)
 
@@ -178,7 +183,7 @@ with col_f1:
     sel_acct = st.selectbox("🏛️ 회계구분 선택 (예산 규모순)", all_accts, index=0)
 
 with col_f2:
-    sel_dept = st.selectbox("🏢 소관 부서 선택 (부서명을 직접 키보드로 입력하면 자동 탐색됩니다)", all_depts, index=0)
+    sel_dept = st.selectbox("🏢 소관 부서 선택 (가나다순 / '처인구' 키보드 입력 시 즉시 탐색)", all_depts, index=0)
 
 # 필터 1차 적용
 filtered_df = df_year.copy()
