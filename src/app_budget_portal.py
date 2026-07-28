@@ -227,8 +227,8 @@ if search_keyword.strip():
     )
     search_df = search_df[mask]
 
-# 검색 결과 요약 메트릭 바
-col_m1, col_m2, col_m3 = st.columns(3)
+# 검색 결과 요약 메트릭 바 (예산 합계 카드 제거 및 2분할 배치)
+col_m1, col_m2 = st.columns(2)
 
 with col_m1:
     st.markdown(f"""
@@ -239,15 +239,6 @@ with col_m1:
     """, unsafe_allow_html=True)
 
 with col_m2:
-    total_search_eok = search_df['예산액_억원'].sum()
-    st.markdown(f"""
-    <div class="metric-badge">
-        <div class="metric-label">검색 항목 예산 합계</div>
-        <div class="metric-value">{total_search_eok:,.2f} 억 원</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_m3:
     st.markdown(f"""
     <div class="metric-badge">
         <div class="metric-label">조회 대상 회계연도</div>
