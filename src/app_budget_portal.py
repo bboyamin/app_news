@@ -101,23 +101,44 @@ st.markdown("""
         gap: 8px;
     }
 
-    /* 입력 텍스트 박스 고시성 강화 */
+    /* 대형 애플/구글 스타일 텍스트 입력 박스 자체 디자인 */
+    div[data-testid="stTextInput"] {
+        margin-top: 6px;
+        margin-bottom: 10px;
+    }
+
     div[data-baseweb="input"] {
-        border-radius: 10px !important;
-        border: 1.5px solid #93c5fd !important;
-        background-color: #f8fafc !important;
+        border-radius: 14px !important;
+        border: 2px solid #cbd5e1 !important;
+        background-color: #ffffff !important;
+        padding: 6px 12px !important;
+        height: 54px !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05) !important;
+        transition: all 0.25s ease-in-out !important;
+    }
+    
+    div[data-baseweb="input"]:hover {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.15) !important;
     }
     
     div[data-baseweb="input"]:focus-within {
         border-color: #2563eb !important;
         background-color: #ffffff !important;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18) !important;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2), 0 8px 20px rgba(37, 99, 235, 0.15) !important;
     }
     
     div[data-baseweb="input"] input {
-        font-size: 16px !important;
+        font-size: 17px !important;
         font-weight: 600 !important;
         color: #0f172a !important;
+        padding-left: 8px !important;
+    }
+
+    div[data-baseweb="input"] input::placeholder {
+        color: #94a3b8 !important;
+        font-size: 15px !important;
+        font-weight: 400 !important;
     }
 
     /* 산출근거 수식 카드 */
