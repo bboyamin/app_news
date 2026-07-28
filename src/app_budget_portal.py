@@ -178,7 +178,11 @@ for d in df_year['부서명'].dropna().unique():
 
 all_depts = ["전체"] + csv_dept_list
 
-col_f1, col_f2 = st.columns(2)
+# 예산구분 정제: 본예산, 추경1회, 추경2회 등 목록 추출
+raw_type_list = [str(t).strip() for t in df_year['예산구분'].dropna().unique() if str(t).strip() not in ['-', 'nan', 'N/A', '']]
+all_budget_types = ["전체"] + raw_type_list
+
+col_f1, col_f2, col_f3 = st.columns(3)
 
 with col_f1:
     sel_acct = st.selectbox("🏛️ 회계구분 선택 (예산 규모순)", all_accts, index=0)
@@ -186,12 +190,17 @@ with col_f1:
 with col_f2:
     sel_dept = st.selectbox("🏢 소관 부서 선택 (CSV 원본 부서 순서)", all_depts, index=0)
 
+with col_f3:
+    sel_budget_type = st.selectbox("📑 예산구분 선택 (본예산/추경1회...)", all_budget_types, index=0)
+
 # 필터 적용
 filtered_df = df_year.copy()
 if sel_acct != "전체":
     filtered_df = filtered_df[filtered_df['회계명'] == sel_acct]
 if sel_dept != "전체":
     filtered_df = filtered_df[filtered_df['부서명'] == sel_dept]
+if sel_budget_type != "전체":
+    filtered_df = filtered_df[filtered_df['예산구분'] == sel_budget_type]
 
 # ==========================================
 # 4. 실시간 통합 키워드 검색창
@@ -248,7 +257,7 @@ st.markdown("<br>", unsafe_allow_html=True)
 # ==========================================
 # 5. 검색 결과 테이블 및 엑셀 다운로드
 # ==========================================
-display_cols = ['부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액', '의무/재량구분']
+display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액', '의무/재량구분']
 
 col_t1, col_t2 = st.columns([4, 1])
 with col_t1:
