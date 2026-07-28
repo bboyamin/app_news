@@ -257,13 +257,19 @@ col_t1, col_t2 = st.columns([4, 1])
 with col_t1:
     st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건)")
 with col_t2:
-    csv_data = search_df[display_cols].to_csv(index=False, encoding='utf-8-sig')
+    # 특수문자 안전 파일명 생성
+    safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
+    download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
+    
+    # UTF-8-SIG 바이너리 바이트 페이로드 생성 (엑셀 자동 인식 100%)
+    csv_bytes = search_df[display_cols].to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
+    
     st.download_button(
         label="📥 엑셀/CSV 다운로드",
-        data=csv_data,
-        file_name=f"예산검색결과_{selected_year}_{search_keyword}.csv",
+        data=csv_bytes,
+        file_name=download_filename,
         mime="text/csv",
-        use_container_width=True
+        key="btn_download_csv"
     )
 
 # 테이블 표출 (브라우저 웹소켓 과부하 100% 차단용 쾌속 200건 표출)
