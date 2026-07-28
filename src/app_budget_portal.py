@@ -291,18 +291,18 @@ with col_t2:
         key="btn_download_csv"
     )
 
-# 테이블 표출 (예산액 수치형 오른쪽 정렬 + 천원 단위 콤마 + 수치 정렬 지원)
+# 테이블 표출 (다중 행 선택 지원 + 예산액 오른쪽 정렬 + 실시간 합계 계산)
 total_cnt = len(search_df)
 show_table_df = search_df[display_cols].head(200).copy()
 show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
 
-if total_cnt > 200:
-    st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
-
-st.dataframe(
+# 테이블 다중 클릭/선택 이벤트 수집
+event = st.dataframe(
     show_table_df,
     use_container_width=True,
     height=450,
+    on_select="rerun",
+    selection_mode="multi_row",
     column_config={
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
@@ -312,6 +312,19 @@ st.dataframe(
         "산출근거식": st.column_config.TextColumn("산출근거 수식 (단가*수량)", width="medium")
     }
 )
+
+# 선택된 셀/행 실시간 예산 합계 자동 계산 뱃지
+selected_rows = event.selection.get("rows", [])
+if selected_rows:
+    sel_df = show_table_df.iloc[selected_rows]
+    sum_cheon = sel_df['예산액_num'].sum()
+    sum_eok = sum_cheon / 100000.0
+    st.info(f"✨ **선택된 {len(selected_rows)}개 항목 예산 합계:** `{sum_cheon:,.0f} 천원` (**{sum_eok:,.2f} 억 원**)")
+else:
+    if total_cnt > 200:
+        st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (원하시는 항목 좌측 체크박스를 선택하시면 실시간 합계가 계산됩니다)")
+    else:
+        st.caption("💡 원하시는 예산 항목 행을 마우스로 선택하시면 선택된 항목들의 예산 합계가 실시간으로 자동 계산됩니다.")
 
 # ==========================================
 # 6. 개별 항목 세부 산출근거 수식 팝업 카드
