@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------
-# 0. 프리미엄 라이트 Pretendard CSS 디자인 (줄바꿈 pre-line 반영)
+# 0. 프리미엄 라이트 Pretendard CSS 디자인 (자연스러운 개조)
 # -------------------------------------------------------------
 st.markdown("""
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
@@ -69,28 +69,29 @@ st.markdown("""
     }
     
     .article-meta {
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 700;
-        color: #64748b;
+        color: #475569;
         background-color: #f1f5f9;
-        padding: 3px 8px;
-        border-radius: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
         display: inline-block;
-        margin-bottom: 10px;
+        margin-bottom: 12px;
     }
     
-    /* 요약 박스: 줄바꿈 pre-wrap 보존 및 가독성 극대화 */
+    /* 완벽한 줄글 가독성을 보장하는 고품격 요약 박스 */
     .summary-box {
         background-color: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
-        padding: 18px 22px;
-        font-size: 14.8px;
-        line-height: 1.75;
+        padding: 20px 24px;
+        font-size: 15px;
+        line-height: 1.8;
         color: #1e293b;
         margin-top: 8px;
-        margin-bottom: 12px;
+        margin-bottom: 14px;
         white-space: pre-wrap !important;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.02);
     }
     
     .stTabs [data-baseweb="tab-list"] {
@@ -168,7 +169,7 @@ FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 
 # -------------------------------------------------------------
-# 1. 고도화된 크롤링 및 깊이 있는 AI 요약 로직
+# 1. 고도화된 크롤링 및 자연스러운 고품격 브리핑 요약
 # -------------------------------------------------------------
 
 def fetch_etnews_html(ymd_str):
@@ -272,15 +273,18 @@ def ai_summarize(title, content):
         "Content-Type": "application/json"
     }
     
-    # 🎓 깊이 있는 내용 전송 및 1, 2, 3 독립 행 보장 프롬프트
-    prompt = f"""너는 대한민국 최고 수준의 수석 IT/산업 언론 분석가이다.
-아래 뉴스 기사를 정밀 분석하여 읽는 사람이 기사의 핵심 맥락, 주요 사실, 구체적 수치, 시사점까지 완벽하게 이해할 수 있도록 깊이 있고 충실한 3가지 브리핑 포인트(1., 2., 3.)를 작성하라.
+    # 🎓 자연스러운 연결 및 고품격 내러티브 브리핑 프롬프트
+    prompt = f"""너는 대한민국 최고 수준의 수석 IT/산업 전문 언론 브리퍼이다.
+딱딱한 번호 매기기(1, 2, 3)를 완전히 배제하고, 독자가 기사의 핵심 배경과 중요 수치, 향후 영향을 한 눈에 자연스럽고 매끄럽게 이해할 수 있는 '최적의 자연어 프리미엄 뉴스 브리핑'을 작성하라.
 
-[작성 지침 - 절대 준수]:
-1. 반드시 1., 2., 3. 각 번호는 새로운 줄(줄바꿈)로 시작하여 각 포인트 사이에 빈 줄(줄바꿈)을 넣어 보기 쉽게 나눌 것.
-2. 각 번호(1., 2., 3.) 뒤에는 단 한 줄의 짧은 요약에 그치지 말고, 주요 내용과 배경 수치를 2~3문장 이상 상세하게 기술하여 독자가 기사의 핵심 내용을 충분히 파악할 수 있도록 작성할 것.
-3. 기사 본문에 나오는 주요 인물, 기업명, 투자 금액, 정책 규격 등 핵심 고유명사와 수치를 생략하지 말고 포함할 것.
-4. 사족이나 인사말은 전부 배제하고 오직 1., 2., 3. 번호 리스트 형태로만 응답할 것.
+[작성 가이드라인 - 최고 수준 가독성 보장]:
+1. **📌 [핵심 한 줄 요약]**: 맨 첫 줄에는 기사 전체의 핵심 결론을 명확하고 깔끔한 한 문장으로 제시하라.
+2. **📖 [자연스러운 맥락 브리핑]**: 두 번째 단락부터는 딱딱한 번호 목록이 아닌, 자연스럽게 이어지는 글감 문단(2~3개 자연스러운 단락)으로 작성하라.
+   - 첫 번째 단락: **사건 발생 배경 및 주요 사실/핵심 인물/기업**
+   - 두 번째 단락: **구체적인 수치 데이터, 주요 투자/기술 규격 세부 내용**
+   - 세 번째 단락: **산업계에 미칠 영향 및 향후 주시할 관전 포인트**
+3. 딱딱하게 끊기지 않고 문장과 문장이 술술 읽히도록 완숙하고 격조 높은 한국어 문장 구조로 작성하라.
+4. 인사말이나 사족(예: '요약해 드리겠습니다' 등)은 완전히 배제하라.
 
 [기사 제목]: {title}
 [기사 본문]:
@@ -308,11 +312,7 @@ def ai_summarize(title, content):
         )
         response.raise_for_status()
         response_json = response.json()
-        raw_summary = response_json['choices'][0]['message']['content'].strip()
-        
-        # 줄바꿈 정돈 (1., 2., 3. 사이 줄바꿈 보장)
-        formatted_summary = raw_summary.replace("\n1.", "1.").replace("\n2.", "\n\n2.").replace("\n3.", "\n\n3.")
-        return formatted_summary
+        return response_json['choices'][0]['message']['content'].strip()
     except Exception as e:
         return f"❌ 요약 실패 ({e})"
 
@@ -344,7 +344,7 @@ if st.sidebar.button("🔄 지면 뉴스 실시간 다시 불러오기", use_con
 
 # 메인 타이틀 영역
 st.markdown('<div class="main-title">📰 전자신문 지면 브리핑</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 깊이 있는 AI 브리핑이 바로 확장됩니다.</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 자연스럽고 깊이 있는 AI 브리핑이 바로 확장됩니다.</div>', unsafe_allow_html=True)
 
 # 실시간 기사 수집 실행
 with st.spinner("지면 뉴스 목록을 수집 중..."):
@@ -424,7 +424,7 @@ else:
                                 use_container_width=True
                             )
                     else:
-                        with st.spinner("깊이 있는 AI 요약 브리핑 작성 중..."):
+                        with st.spinner("자연스러운 고품격 AI 요약 브리핑 작성 중..."):
                             content = get_article_body(art["url"])
                             if content:
                                 result = ai_summarize(art["title"], content)
