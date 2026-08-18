@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------
-# 0. 프리미엄 라이트 Pretendard CSS 디자인 (자연스러운 개조)
+# 0. 프리미엄 라이트 Pretendard CSS 디자인
 # -------------------------------------------------------------
 st.markdown("""
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
@@ -79,14 +79,14 @@ st.markdown("""
         margin-bottom: 12px;
     }
     
-    /* 완벽한 줄글 가독성을 보장하는 고품격 요약 박스 */
+    /* 황금 비율 스마트 브리핑 전용 상쾌한 요약 박스 */
     .summary-box {
         background-color: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
-        padding: 20px 24px;
-        font-size: 15px;
-        line-height: 1.8;
+        padding: 18px 22px;
+        font-size: 14.8px;
+        line-height: 1.75;
         color: #1e293b;
         margin-top: 8px;
         margin-bottom: 14px;
@@ -169,7 +169,7 @@ FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 
 # -------------------------------------------------------------
-# 1. 고도화된 크롤링 및 자연스러운 고품격 브리핑 요약
+# 1. 고도화된 크롤링 및 군더더기 없는 황금 비율 브리핑 로직
 # -------------------------------------------------------------
 
 def fetch_etnews_html(ymd_str):
@@ -273,22 +273,21 @@ def ai_summarize(title, content):
         "Content-Type": "application/json"
     }
     
-    # 🎓 자연스러운 연결 및 고품격 내러티브 브리핑 프롬프트
-    prompt = f"""너는 대한민국 최고 수준의 수석 IT/산업 전문 언론 브리퍼이다.
-딱딱한 번호 매기기(1, 2, 3)를 완전히 배제하고, 독자가 기사의 핵심 배경과 중요 수치, 향후 영향을 한 눈에 자연스럽고 매끄럽게 이해할 수 있는 '최적의 자연어 프리미엄 뉴스 브리핑'을 작성하라.
+    # 🎓 황금 비율 (Compact & Rich) 스마트 브리핑 프롬프트
+    prompt = f"""너는 대한민국 최고의 IT/산업 전문 수석 뉴스 에디터이다.
+아래 기사 본문을 읽고, 바쁜 사용자가 10초 만에 기사의 핵심과 중요 수치/시사점을 완벽히 파악할 수 있도록 '황금 비율(Compact & Rich) 스마트 브리핑'을 작성하라.
 
-[작성 가이드라인 - 최고 수준 가독성 보장]:
-1. **📌 [핵심 한 줄 요약]**: 맨 첫 줄에는 기사 전체의 핵심 결론을 명확하고 깔끔한 한 문장으로 제시하라.
-2. **📖 [자연스러운 맥락 브리핑]**: 두 번째 단락부터는 딱딱한 번호 목록이 아닌, 자연스럽게 이어지는 글감 문단(2~3개 자연스러운 단락)으로 작성하라.
-   - 첫 번째 단락: **사건 발생 배경 및 주요 사실/핵심 인물/기업**
-   - 두 번째 단락: **구체적인 수치 데이터, 주요 투자/기술 규격 세부 내용**
-   - 세 번째 단락: **산업계에 미칠 영향 및 향후 주시할 관전 포인트**
-3. 딱딱하게 끊기지 않고 문장과 문장이 술술 읽히도록 완숙하고 격조 높은 한국어 문장 구조로 작성하라.
-4. 인사말이나 사족(예: '요약해 드리겠습니다' 등)은 완전히 배제하라.
+[작성 가이드라인 - 군더더기 없는 황금 비율 준수]:
+1. **📌 [핵심 한 줄 요약]**: 맨 첫 줄에 기사의 가장 중요한 핵심 결론을 명쾌한 1문장으로 제시하라.
+2. **📖 [스마트 브리핑 (총 3~4문장, 2개 단락)]**:
+   - **첫 번째 단락 (핵심 팩트 & 수치 데이터)**: 2문장 내외로 기사의 핵심 사건, 중요 수치/기업명/정책 요건을 명확히 요약하라.
+   - **두 번째 단락 (시사점 & 향후 전망)**: 1~2문장으로 기사가 가지는 산업적 의미와 향후 관전 포인트를 부드럽게 매듭지어라.
+3. 원문 대비 군더더기는 과감히 제거하되, 핵심 수치와 고유명사는 빼놓지 않는 '알짜배기 엑기스'로 작성할 것.
+4. 인사말이나 사족(예: '요약입니다' 등)은 완전히 배제하라.
 
 [기사 제목]: {title}
 [기사 본문]:
-{content[:3500]}
+{content[:3000]}
 """
 
     payload = {
@@ -344,7 +343,7 @@ if st.sidebar.button("🔄 지면 뉴스 실시간 다시 불러오기", use_con
 
 # 메인 타이틀 영역
 st.markdown('<div class="main-title">📰 전자신문 지면 브리핑</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 자연스럽고 깊이 있는 AI 브리핑이 바로 확장됩니다.</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 한눈에 쏙 들어오는 스마트 AI 브리핑이 확장됩니다.</div>', unsafe_allow_html=True)
 
 # 실시간 기사 수집 실행
 with st.spinner("지면 뉴스 목록을 수집 중..."):
@@ -424,7 +423,7 @@ else:
                                 use_container_width=True
                             )
                     else:
-                        with st.spinner("자연스러운 고품격 AI 요약 브리핑 작성 중..."):
+                        with st.spinner("한눈에 쏙 들어오는 스마트 AI 요약 작성 중..."):
                             content = get_article_body(art["url"])
                             if content:
                                 result = ai_summarize(art["title"], content)
