@@ -1,0 +1,6 @@
+*.csv
+chroma_db/rag_documents.db
+welfare.db
+temp_docs/
+node_modules/
+.DS_Store
