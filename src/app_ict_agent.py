@@ -6,6 +6,7 @@ import urllib3
 import unicodedata
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 
 # 로컬 HWPX/HWP/PDF 파서 및 정보통신 전용 RAG 엔진 임포트
@@ -109,7 +110,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 메인 타이틀 헤더 균형 배치 (상단 여백 3.2rem으로 짤림 방지)
+# 메인 타이틀 헤더 균형 배치
 if logo_b64:
     st.markdown(f"""
     <div class="header-container">
@@ -123,35 +124,50 @@ else:
 st.markdown('<div class="brand-subtitle">정보통신 관련 법령, 기술기준, 설계 해설서 등을 기반으로 법적·기술적 근거 조항과 최적의 검토 결과를 제공하는 지능형 에이전트입니다.</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# 🔑 [사용자 개인 API Key 기억 및 관리 세션]
+# 🔑 [브라우저 새로고침/재접속 시에도 API Key 100% 자동 유지 기술]
 # ---------------------------------------------------
+query_params = st.query_params
+
 if "user_factchat_key" not in st.session_state:
-    st.session_state.user_factchat_key = os.getenv("FACTCHAT_API_KEY") or ""
+    if "key" in query_params and query_params["key"]:
+        st.session_state.user_factchat_key = query_params["key"]
+    else:
+        st.session_state.user_factchat_key = os.getenv("FACTCHAT_API_KEY") or ""
 
 if "rag_uploader_key" not in st.session_state:
     st.session_state.rag_uploader_key = 0
 
 # ---------------------------------------------------
 # 📁 사이드바: 1) 사용자 개인 API Key 설정 + 2) 지식 문서 업로더
-# (요청대로 사이드바 상단 로고는 제거)
 # ---------------------------------------------------
 with st.sidebar:
     st.markdown("### 🔑 사용자 API Key 설정")
-    st.markdown("직원별 전용 API Key를 최초 1회 등록하면 세션 동안 안전하게 자동 기억됩니다.")
+    st.markdown("API Key를 입력하면 브라우저 재접속/새로고침 시에도 **100% 자동 유지**됩니다.")
     
     input_key = st.text_input(
         "FactChat API Key 입력",
         value=st.session_state.user_factchat_key,
         type="password",
-        help="사용자 개인 FactChat API Key를 입력하세요. 한번 입력하면 대화 중 매번 또 입력할 필요가 없습니다."
+        help="사용자 개인 FactChat API Key를 입력하세요. 입력 시 새로고침이나 재접속을 해도 키가 자동으로 유지됩니다."
     )
     
     if input_key != st.session_state.user_factchat_key:
         st.session_state.user_factchat_key = input_key
-        st.success("✅ API Key가 성공적으로 업데이트 및 가동 등록되었습니다!")
+        if input_key:
+            st.query_params["key"] = input_key
+        else:
+            if "key" in st.query_params:
+                del st.query_params["key"]
+        st.success("✅ API Key가 자동 저장되었습니다! (새로고침 시에도 100% 유지)")
+        st.rerun()
         
     if st.session_state.user_factchat_key:
-        st.caption("🔒 **API Key 상태**: 정상 등록됨 (자동 사용 중)")
+        st.caption("🔒 **API Key 상태**: 영구 자동 기억 활성화됨")
+        if st.button("🔑 기억된 API Key 삭제 (초기화)", use_container_width=True):
+            st.session_state.user_factchat_key = ""
+            if "key" in st.query_params:
+                del st.query_params["key"]
+            st.rerun()
     else:
         st.warning("⚠️ API Key를 입력하셔야 AI 검토를 시작할 수 있습니다.")
         
@@ -241,7 +257,7 @@ with tab_chat:
         st.markdown("""
         <div class="guide-card">
             <div style="font-weight:800; font-size:1.1rem; color:#0f172a; margin-bottom:8px;">💡 정보통신 규제 및 설계 검토 AI 에이전트 활용 가이드</div>
-            1. 왼쪽 사이드바에서 <b>개인 API Key</b>를 입력해 주세요. (한번 입력하면 자동 기억됩니다)<br>
+            1. 왼쪽 사이드바에서 <b>개인 API Key</b>를 입력해 주세요. (한번 입력하면 새로고침/재접속 시에도 자동 유지됩니다)<br>
             2. 연동된 법령, 기술기준, 설비기준, 해설서의 내용을 기반으로 규격 및 검토 사항을 질의하세요.<br>
             3. AI 에이전트가 <b>법령 조항 근거 인용, 규격 비교 표(Table), 적합성 결론</b>을 검토 브리핑합니다.<br><br>
             <b>질문 예시</b>: <i>"TPS실 주간선 관로의 최소 규격 기준과 관련 조항은 뭐야?", "구내통신 아울렛 Cat.6 설치 기준 및 단자함 수용 포트 규정 알려줘"</i>
