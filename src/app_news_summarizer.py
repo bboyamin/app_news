@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import streamlit as st
 from datetime import datetime as dt, timezone, timedelta
 
-# 한국 표준시 (KST = UTC + 9시간) 전역 설정 (Streamlit Cloud UTC 시차 문제 완벽 해결)
+# 한국 표준시 (KST = UTC + 9시간) 전역 설정
 KST = timezone(timedelta(hours=9))
 
 def get_kst_now():
@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # -------------------------------------------------------------
-# 0. 프리미엄 라이트 Pretendard CSS 디자인
+# 0. 프리미엄 라이트 Pretendard CSS 디자인 (줄바꿈 pre-line 반영)
 # -------------------------------------------------------------
 st.markdown("""
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
@@ -79,16 +79,18 @@ st.markdown("""
         margin-bottom: 10px;
     }
     
+    /* 요약 박스: 줄바꿈 pre-wrap 보존 및 가독성 극대화 */
     .summary-box {
         background-color: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
-        padding: 16px 20px;
-        font-size: 14.5px;
-        line-height: 1.6;
-        color: #334155;
+        padding: 18px 22px;
+        font-size: 14.8px;
+        line-height: 1.75;
+        color: #1e293b;
         margin-top: 8px;
         margin-bottom: 12px;
+        white-space: pre-wrap !important;
     }
     
     .stTabs [data-baseweb="tab-list"] {
@@ -166,13 +168,10 @@ FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 
 # -------------------------------------------------------------
-# 1. 고도화된 크롤링 및 네트워크 세션 로직
+# 1. 고도화된 크롤링 및 깊이 있는 AI 요약 로직
 # -------------------------------------------------------------
 
 def fetch_etnews_html(ymd_str):
-    """
-    브라우저 표준 헤더 및 다중 폴백 URL로 전자신문 지면 PDF HTML을 안정적으로 수집합니다.
-    """
     urls = [
         f"https://pdf.etnews.com/pdf_today.html?ymd={ymd_str}",
         f"https://pdf.etnews.com/index.html?ymd={ymd_str}"
@@ -200,9 +199,6 @@ def fetch_etnews_html(ymd_str):
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_news_list_by_date(ymd_str):
-    """
-    지면 목록을 수집하며, 실패(빈 데이터)인 경우 절대 캐싱하지 않고 None을 반환합니다.
-    """
     html_text = fetch_etnews_html(ymd_str)
     if not html_text:
         return None
@@ -262,7 +258,7 @@ def get_article_body(url):
                 s.extract()
             return content_div.text.strip()
         else:
-            return soup.text[:2000].strip()
+            return soup.text[:3000].strip()
     except Exception:
         return None
 
@@ -276,12 +272,19 @@ def ai_summarize(title, content):
         "Content-Type": "application/json"
     }
     
-    prompt = f"""아래 뉴스 기사를 읽고 핵심 요약 리스트 3줄(1, 2, 3 번호 형태)을 한국어로 작성해 주세요. 
-사족이나 안내문구는 전부 빼고 오직 요약 리스트만 응답해 주세요.
+    # 🎓 깊이 있는 내용 전송 및 1, 2, 3 독립 행 보장 프롬프트
+    prompt = f"""너는 대한민국 최고 수준의 수석 IT/산업 언론 분석가이다.
+아래 뉴스 기사를 정밀 분석하여 읽는 사람이 기사의 핵심 맥락, 주요 사실, 구체적 수치, 시사점까지 완벽하게 이해할 수 있도록 깊이 있고 충실한 3가지 브리핑 포인트(1., 2., 3.)를 작성하라.
+
+[작성 지침 - 절대 준수]:
+1. 반드시 1., 2., 3. 각 번호는 새로운 줄(줄바꿈)로 시작하여 각 포인트 사이에 빈 줄(줄바꿈)을 넣어 보기 쉽게 나눌 것.
+2. 각 번호(1., 2., 3.) 뒤에는 단 한 줄의 짧은 요약에 그치지 말고, 주요 내용과 배경 수치를 2~3문장 이상 상세하게 기술하여 독자가 기사의 핵심 내용을 충분히 파악할 수 있도록 작성할 것.
+3. 기사 본문에 나오는 주요 인물, 기업명, 투자 금액, 정책 규격 등 핵심 고유명사와 수치를 생략하지 말고 포함할 것.
+4. 사족이나 인사말은 전부 배제하고 오직 1., 2., 3. 번호 리스트 형태로만 응답할 것.
 
 [기사 제목]: {title}
 [기사 본문]:
-{content[:2500]}
+{content[:3500]}
 """
 
     payload = {
@@ -301,16 +304,20 @@ def ai_summarize(title, content):
             headers=headers,
             json=payload,
             verify=False,
-            timeout=25
+            timeout=30
         )
         response.raise_for_status()
         response_json = response.json()
-        return response_json['choices'][0]['message']['content'].strip()
+        raw_summary = response_json['choices'][0]['message']['content'].strip()
+        
+        # 줄바꿈 정돈 (1., 2., 3. 사이 줄바꿈 보장)
+        formatted_summary = raw_summary.replace("\n1.", "1.").replace("\n2.", "\n\n2.").replace("\n3.", "\n\n3.")
+        return formatted_summary
     except Exception as e:
         return f"❌ 요약 실패 ({e})"
 
 # -------------------------------------------------------------
-# 2. UI 구성 (KST 한국 표준시 기준 날짜 처리)
+# 2. UI 구성
 # -------------------------------------------------------------
 
 if "summaries" not in st.session_state:
@@ -318,7 +325,6 @@ if "summaries" not in st.session_state:
 if "selected_article" not in st.session_state:
     st.session_state.selected_article = None
 
-# 한국 표준시(KST) 기준 오늘 날짜 계산
 today_kst = get_kst_today()
 
 # 사이드바 레이아웃
@@ -338,7 +344,7 @@ if st.sidebar.button("🔄 지면 뉴스 실시간 다시 불러오기", use_con
 
 # 메인 타이틀 영역
 st.markdown('<div class="main-title">📰 전자신문 지면 브리핑</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 AI 요약본이 바로 확장됩니다.</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 깊이 있는 AI 브리핑이 바로 확장됩니다.</div>', unsafe_allow_html=True)
 
 # 실시간 기사 수집 실행
 with st.spinner("지면 뉴스 목록을 수집 중..."):
@@ -355,7 +361,6 @@ if not categorized_data:
             st.cache_data.clear()
             st.rerun()
 else:
-    # 탭 메뉴 제공
     tab_list, tab_summary = st.tabs(["📝 오늘자 지면 목록", "💡 모아둔 요약 리포트"])
     
     with tab_list:
@@ -419,7 +424,7 @@ else:
                                 use_container_width=True
                             )
                     else:
-                        with st.spinner("요약 작성 중..."):
+                        with st.spinner("깊이 있는 AI 요약 브리핑 작성 중..."):
                             content = get_article_body(art["url"])
                             if content:
                                 result = ai_summarize(art["title"], content)
