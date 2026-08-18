@@ -4,7 +4,16 @@ import datetime
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import streamlit as st
-from datetime import datetime as dt
+from datetime import datetime as dt, timezone, timedelta
+
+# 한국 표준시 (KST = UTC + 9시간) 전역 설정 (Streamlit Cloud UTC 시차 문제 완벽 해결)
+KST = timezone(timedelta(hours=9))
+
+def get_kst_now():
+    return dt.now(KST)
+
+def get_kst_today():
+    return get_kst_now().date()
 
 # .env 파일로부터 환경 변수 로드
 load_dotenv()
@@ -157,7 +166,7 @@ FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 
 # -------------------------------------------------------------
-# 1. 고도화된 크롤링 및 네트워크 세션 로직 (실패 방지 알고리즘)
+# 1. 고도화된 크롤링 및 네트워크 세션 로직
 # -------------------------------------------------------------
 
 def fetch_etnews_html(ymd_str):
@@ -201,7 +210,6 @@ def get_news_list_by_date(ymd_str):
     try:
         soup = BeautifulSoup(html_text, "html.parser")
         
-        # 지면 박스 요소 다중 태그 감지
         boxes = soup.find_all("div", class_="box") or soup.find_all("dl", class_="box") or soup.find_all("div", class_="pdf_box")
         if not boxes:
             return None
@@ -231,7 +239,6 @@ def get_news_list_by_date(ymd_str):
             if articles:
                 categorized_news[section_title] = articles
                 
-        # 결과가 있는 경우에만 반환 (빈 결과는 캐싱되지 않음)
         return categorized_news if categorized_news else None
     except Exception:
         return None
@@ -303,7 +310,7 @@ def ai_summarize(title, content):
         return f"❌ 요약 실패 ({e})"
 
 # -------------------------------------------------------------
-# 2. UI 구성
+# 2. UI 구성 (KST 한국 표준시 기준 날짜 처리)
 # -------------------------------------------------------------
 
 if "summaries" not in st.session_state:
@@ -311,12 +318,15 @@ if "summaries" not in st.session_state:
 if "selected_article" not in st.session_state:
     st.session_state.selected_article = None
 
+# 한국 표준시(KST) 기준 오늘 날짜 계산
+today_kst = get_kst_today()
+
 # 사이드바 레이아웃
 st.sidebar.markdown("### 📅 지면 날짜 선택")
 selected_date = st.sidebar.date_input(
     "조회 날짜",
-    value=dt.today(),
-    max_value=dt.today(),
+    value=today_kst,
+    max_value=today_kst,
     label_visibility="collapsed"
 )
 ymd_str = selected_date.strftime("%Y%m%d")
@@ -334,7 +344,6 @@ st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d
 with st.spinner("지면 뉴스 목록을 수집 중..."):
     categorized_data = get_news_list_by_date(ymd_str)
 
-# 휴간일(주말 등) 판단
 is_weekend = selected_date.weekday() in [5, 6]
 
 if not categorized_data:
