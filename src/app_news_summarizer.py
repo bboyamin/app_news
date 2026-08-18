@@ -1,9 +1,10 @@
 import os
 import requests
+import datetime
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import streamlit as st
-from datetime import datetime
+from datetime import datetime as dt
 
 # .env 파일로부터 환경 변수 로드
 load_dotenv()
@@ -12,24 +13,22 @@ load_dotenv()
 st.set_page_config(
     page_title="전자신문 지면 브리핑",
     page_icon="📰",
-    layout="centered", # 1열 가운데 정렬로 모바일과 웹 모두 가독성 극대화
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
 # -------------------------------------------------------------
-# 0. 토스/애플 서비스 스타일의 극단적 미니멀리즘(Premium Light) CSS 적용
+# 0. 프리미엄 라이트 Pretendard CSS 디자인
 # -------------------------------------------------------------
 st.markdown("""
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" />
 <style>
-    /* 전체 배경: 세련된 순백색과 미세한 소프트 그레이 톤 */
     html, body, [class*="css"], .stApp {
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif !important;
         background-color: #ffffff !important;
         color: #1e293b !important;
     }
     
-    /* 심플하고 단정한 메인 타이틀 */
     .main-title {
         font-size: 26px !important;
         font-weight: 800 !important;
@@ -43,17 +42,16 @@ st.markdown("""
     .main-subtitle {
         font-size: 14px;
         color: #64748b;
-        margin-bottom: 32px;
+        margin-bottom: 24px;
         line-height: 1.5;
         text-align: left;
     }
     
-    /* 지면 구분선 및 단정한 텍스트 */
     .section-header {
         font-size: 15px;
         font-weight: 800;
         color: #64748b;
-        margin-top: 40px;
+        margin-top: 36px;
         margin-bottom: 12px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
@@ -61,7 +59,6 @@ st.markdown("""
         padding-bottom: 6px;
     }
     
-    /* 은은한 캡슐 배지 (토스 스타일) */
     .article-meta {
         font-size: 10px;
         font-weight: 700;
@@ -73,7 +70,6 @@ st.markdown("""
         margin-bottom: 10px;
     }
     
-    /* 요약 박스: 튀지 않는 미색 그레이 박스 디자인 */
     .summary-box {
         background-color: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -86,7 +82,6 @@ st.markdown("""
         margin-bottom: 12px;
     }
     
-    /* 탭 헤더: 얇은 회색 라인 및 세련된 미니멀 탭 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 24px;
         border-bottom: 1px solid #f1f5f9;
@@ -108,7 +103,6 @@ st.markdown("""
         border-bottom: 2px solid #0f172a !important;
     }
     
-    /* Streamlit 기본 버튼을 보더리스(Borderless) 기사 행 스타일로 개조 */
     div.stButton > button {
         background: transparent !important;
         color: #334155 !important;
@@ -130,7 +124,6 @@ st.markdown("""
         padding-left: 8px !important;
     }
     
-    /* 보조 링크 버튼 (세련된 아웃라인 스타일) */
     .stLinkButton > a {
         background: #ffffff !important;
         color: #475569 !important;
@@ -147,13 +140,11 @@ st.markdown("""
         background: #f8fafc !important;
     }
     
-    /* 사이드바 심플 튜닝 */
     section[data-testid="stSidebar"] {
         background-color: #f8fafc !important;
         border-right: 1px solid #e2e8f0;
     }
     
-    /* 메인 폼 패딩 조율 */
     .block-container {
         padding-top: 3rem !important;
         padding-bottom: 5rem !important;
@@ -166,57 +157,90 @@ FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 
 # -------------------------------------------------------------
-# 1. 크롤링 및 요약 비즈니스 로직
+# 1. 고도화된 크롤링 및 네트워크 세션 로직 (실패 방지 알고리즘)
 # -------------------------------------------------------------
 
-@st.cache_data(ttl=3600)  # 지면 목록은 1시간 캐싱
-def get_news_list_by_date(ymd_str):
-    url = f"https://pdf.etnews.com/pdf_today.html?ymd={ymd_str}"
+def fetch_etnews_html(ymd_str):
+    """
+    브라우저 표준 헤더 및 다중 폴백 URL로 전자신문 지면 PDF HTML을 안정적으로 수집합니다.
+    """
+    urls = [
+        f"https://pdf.etnews.com/pdf_today.html?ymd={ymd_str}",
+        f"https://pdf.etnews.com/index.html?ymd={ymd_str}"
+    ]
+    
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": "https://pdf.etnews.com/",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache"
     }
     
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return None
+    session = requests.Session()
+    for url in urls:
+        try:
+            res = session.get(url, headers=headers, timeout=8)
+            if res.status_code == 200 and len(res.text) > 2000:
+                return res.text
+        except Exception:
+            continue
             
-        soup = BeautifulSoup(res.text, "html.parser")
-        pdf_list = soup.find("ul", class_="pdf_list")
-        if not pdf_list:
-            return None
-            
-        boxes = pdf_list.find_all("div", class_="box")
-        categorized_news = {}
+    return None
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_news_list_by_date(ymd_str):
+    """
+    지면 목록을 수집하며, 실패(빈 데이터)인 경우 절대 캐싱하지 않고 None을 반환합니다.
+    """
+    html_text = fetch_etnews_html(ymd_str)
+    if not html_text:
+        return None
         
+    try:
+        soup = BeautifulSoup(html_text, "html.parser")
+        
+        # 지면 박스 요소 다중 태그 감지
+        boxes = soup.find_all("div", class_="box") or soup.find_all("dl", class_="box") or soup.find_all("div", class_="pdf_box")
+        if not boxes:
+            return None
+            
+        categorized_news = {}
         for box in boxes:
-            section_title_el = box.find("dt")
+            section_title_el = box.find("dt") or box.find("strong") or box.find("h3")
             if not section_title_el:
                 continue
             section_title = section_title_el.text.strip()
             
-            links = box.find_all("a", target="_blank")
+            links = box.find_all("a", target="_blank") or box.find_all("a")
             articles = []
             for link in links:
                 title = link.text.strip()
                 href = link.get("href", "")
+                if not href or href == "#":
+                    continue
                 if href.startswith("//"):
                     href = "https:" + href
+                elif href.startswith("/"):
+                    href = "https://pdf.etnews.com" + href
                 
-                if title and href:
+                if title and href and ("javascript" not in href):
                     articles.append({"title": title, "url": href})
                     
             if articles:
                 categorized_news[section_title] = articles
                 
-        return categorized_news
-    except Exception as e:
-        st.error(f"데이터 로드 중 에러: {e}")
+        # 결과가 있는 경우에만 반환 (빈 결과는 캐싱되지 않음)
+        return categorized_news if categorized_news else None
+    except Exception:
         return None
+
 
 def get_article_body(url):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": "https://pdf.etnews.com/"
     }
     try:
         res = requests.get(url, headers=headers, timeout=8)
@@ -224,16 +248,17 @@ def get_article_body(url):
             return None
             
         soup = BeautifulSoup(res.text, "html.parser")
-        content_div = soup.find("article") or soup.find("div", class_="article_txt") or soup.find("div", class_="article_body")
+        content_div = soup.find("article") or soup.find("div", class_="article_txt") or soup.find("div", class_="article_body") or soup.find("div", id="articleBody")
         
         if content_div:
-            for s in content_div(["script", "style", "iframe", "ins"]):
+            for s in content_div(["script", "style", "iframe", "ins", "button"]):
                 s.extract()
             return content_div.text.strip()
         else:
             return soup.text[:2000].strip()
     except Exception:
         return None
+
 
 def ai_summarize(title, content):
     if not FACTCHAT_API_KEY:
@@ -278,40 +303,52 @@ def ai_summarize(title, content):
         return f"❌ 요약 실패 ({e})"
 
 # -------------------------------------------------------------
-# 2. UI 구성 (토스 피드처럼 깔끔한 1클릭 전개형 구조)
+# 2. UI 구성
 # -------------------------------------------------------------
 
-# 세션 상태 초기화 (요약 내역 보존)
 if "summaries" not in st.session_state:
     st.session_state.summaries = {}
 if "selected_article" not in st.session_state:
     st.session_state.selected_article = None
 
-# 사이드바 레이아웃 (미니멀 날짜 조절)
+# 사이드바 레이아웃
 st.sidebar.markdown("### 📅 지면 날짜 선택")
 selected_date = st.sidebar.date_input(
     "조회 날짜",
-    value=datetime.today(),
-    max_value=datetime.today(),
+    value=dt.today(),
+    max_value=dt.today(),
     label_visibility="collapsed"
 )
 ymd_str = selected_date.strftime("%Y%m%d")
 
+st.sidebar.write("")
+if st.sidebar.button("🔄 지면 뉴스 실시간 다시 불러오기", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
+
 # 메인 타이틀 영역
 st.markdown('<div class="main-title">📰 전자신문 지면 브리핑</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 AI 요약본이 아래로 즉시 확장됩니다.</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="main-subtitle">{selected_date.strftime("%Y년 %m월 %d일")} 자 전자신문 지면 기사입니다. 기사명을 누르면 AI 요약본이 바로 확장됩니다.</div>', unsafe_allow_html=True)
 
 # 실시간 기사 수집 실행
-with st.spinner("뉴스 목록을 가져오는 중..."):
+with st.spinner("지면 뉴스 목록을 수집 중..."):
     categorized_data = get_news_list_by_date(ymd_str)
 
+# 휴간일(주말 등) 판단
+is_weekend = selected_date.weekday() in [5, 6]
+
 if not categorized_data:
-    st.warning(f"📅 {selected_date.strftime('%Y-%m-%d')} 날짜의 지면 정보가 없습니다. (신문 휴간일 또는 네트워크 지연)")
+    if is_weekend:
+        st.warning(f"📅 {selected_date.strftime('%Y-%m-%d')} 은 주말(휴간일)이어서 지면 신문이 발행되지 않는 날입니다. 평일 날짜를 선택하시면 해당 일자의 지면 뉴스를 바로 보실 수 있습니다.")
+    else:
+        st.warning(f"📅 {selected_date.strftime('%Y-%m-%d')} 지면 정보를 불러오는 중입니다. 신문사 발행 직후(아침 06~07시)이거나 네트워크 수집 지연이 발생할 수 있습니다.")
+        if st.button("🔄 지면 캐시 초기화 후 즉시 다시 조회하기"):
+            st.cache_data.clear()
+            st.rerun()
 else:
     # 탭 메뉴 제공
     tab_list, tab_summary = st.tabs(["📝 오늘자 지면 목록", "💡 모아둔 요약 리포트"])
     
-    # [탭 1] 지면별 기사 목록 (토스 아티클 피드 스타일)
     with tab_list:
         sections = list(categorized_data.keys())
         selected_section = st.selectbox(
@@ -326,14 +363,12 @@ else:
             if selected_section != "전체 지면 보기" and selected_section != section:
                 continue
                 
-            # 심플하고 단정한 지면 헤더 선
             st.markdown(f'<div class="section-header">{section}</div>', unsafe_allow_html=True)
             
             for idx, art in enumerate(articles):
                 btn_key = f"feed_{ymd_str}_{section.replace(' ', '_')}_{idx}"
                 is_active = (st.session_state.selected_article == btn_key)
                 
-                # 활성화되었을 때, 텍스트가 굵어지는 동적 스타일 추가
                 if is_active:
                     st.markdown(f"""
                     <style>
@@ -347,7 +382,6 @@ else:
                     </style>
                     """, unsafe_allow_html=True)
                 
-                # 1클릭 보더리스 텍스트 행 버튼
                 if st.button(f"📄  {art['title']}", key=btn_key):
                     if is_active:
                         st.session_state.selected_article = None
@@ -355,12 +389,10 @@ else:
                         st.session_state.selected_article = btn_key
                     st.rerun()
                 
-                # 활성화되었을 때 내용 노출 (차분한 미색 컨테이너 블록)
                 if st.session_state.selected_article == btn_key:
                     st.markdown('<div style="padding: 12px 8px 16px 12px;">', unsafe_allow_html=True)
                     st.markdown(f'<span class="article-meta">📌 {section}</span>', unsafe_allow_html=True)
                     
-                    # 이미 요약된 결과 출력
                     if art["title"] in st.session_state.summaries:
                         summary_data = st.session_state.summaries[art["title"]]["summary"]
                         st.markdown(f'<div class="summary-box">{summary_data}</div>', unsafe_allow_html=True)
@@ -377,7 +409,6 @@ else:
                                 key=f"dl_{btn_key}",
                                 use_container_width=True
                             )
-                    # 요약 내역이 없을 때 최초 1회 실시간 요약 (Lazy Loading)
                     else:
                         with st.spinner("요약 작성 중..."):
                             content = get_article_body(art["url"])
@@ -394,7 +425,6 @@ else:
                                 
                     st.markdown('</div>', unsafe_allow_html=True)
             
-    # [탭 2] 요약 리포트 모음 탭 (심플 라이트 테마)
     with tab_summary:
         st.subheader("📝 실시간 AI 뉴스 브리핑 리포트")
         st.markdown("지면 목록에서 읽어본 기사들의 요약본이 실시간 종합 보고서 형태로 취합되는 대시보드입니다.")
