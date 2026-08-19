@@ -506,9 +506,9 @@ st.dataframe(
 )
 
 # ==========================================
-# 8. 스마트 실시간 예산 분석 패널
+# 8. 스마트 실시간 예산 분석 패널 ('전체' 또는 '본예산' 선택 시에만 작동)
 # ==========================================
-if not search_df.empty:
+if (sel_budget_type in ["전체", "본예산"]) and not search_df.empty:
     st.markdown("---")
     st.markdown("### 📊 검색 예산 실시간 정산 분석 패널")
     
@@ -538,14 +538,13 @@ if not search_df.empty:
         with col_d2:
             st.markdown("##### 📋 부서별 정산 예산 요약표")
             dept_display = dept_group.head(10).copy()
-            dept_display.columns = ['부서명', '예산합계(천원)', '건수', '예산합계(억원)']
+            dept_display.columns = ['부서명', '예산합계(천원)', '건수', '예산합계_억원']
             st.dataframe(
-                dept_display[['부서명', '예산합계(억원)', '예산합계(천원)', '건수']],
+                dept_display[['부서명', '예산합계(천원)', '건수']],
                 use_container_width=True,
                 height=300,
                 column_config={
-                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d"),
-                    "예산합계(억원)": st.column_config.NumberColumn(format="%.2f 억원")
+                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d")
                 }
             )
 
@@ -567,14 +566,13 @@ if not search_df.empty:
         with col_s2:
             st.markdown("##### 📋 통계목별 정산 예산 요약표")
             stat_display = stat_group.head(10).copy()
-            stat_display.columns = ['통계목명', '예산합계(억원)', '예산합계(천원)', '건수']
+            stat_display.columns = ['통계목명', '예산합계(천원)', '건수', '예산합계_억원']
             st.dataframe(
-                stat_display[['통계목명', '예산합계(억원)', '예산합계(천원)', '건수']],
+                stat_display[['통계목명', '예산합계(천원)', '건수']],
                 use_container_width=True,
                 height=300,
                 column_config={
-                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d"),
-                    "예산합계(억원)": st.column_config.NumberColumn(format="%.2f 억원")
+                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d")
                 }
             )
 
@@ -594,13 +592,12 @@ if not search_df.empty:
             
         with col_t2:
             st.markdown("##### 📋 지출 구조 정산 요약표")
-            type_group.columns = ['지출구분', '예산합계(천원)', '건수', '예산합계(억원)']
+            type_group.columns = ['지출구분', '예산합계(천원)', '건수', '예산합계_억원']
             st.dataframe(
-                type_group[['지출구분', '예산합계(억원)', '예산합계(천원)', '건수']],
+                type_group[['지출구분', '예산합계(천원)', '건수']],
                 use_container_width=True,
                 height=220,
                 column_config={
-                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d"),
-                    "예산합계(억원)": st.column_config.NumberColumn(format="%.2f 억원")
+                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d")
                 }
             )
