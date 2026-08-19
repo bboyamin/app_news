@@ -165,8 +165,8 @@ def normalize_item_name(name):
 @st.cache_data(show_spinner="⚡ 13,000건 예산서 정질 정산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
     """
-    13,000건 전체 데이터를 초고속 연산하여 정산 상태를 사전 부여하고 RAM에 영구 캐싱합니다.
-    조회 시 0.001초(1밀리초) 만에 반응합니다.
+    1단계: 추경/경정 대체 제외를 먼저 판단하여 이전 구버전 항목(상위 헤더 및 하위 세부항목 전체)을 '🔄 경정 대체 제외' 처리합니다.
+    2단계: 최신 활성 행 내에서 큰 동그라미 소계 중복을 감지하여 '🔻 소계 중복 제외' 처리합니다.
     """
     df = data_manager.load_year_data(year)
     if df.empty:
@@ -174,15 +174,32 @@ def load_and_prepare_year_data(year):
 
     df_copy = df.copy()
     df_copy['정산 상태'] = '✅ 정산 포함'
+    df_copy['norm_name'] = df_copy['산출근거명'].apply(normalize_item_name)
+    df_copy['sort_key'] = df_copy['예산구분'].apply(get_budget_type_sort_key)
 
-    names = df_copy['산출근거명'].astype(str).values
-    budgets = df_copy['예산액_num'].values
-    depts = df_copy['부서명'].values
-    bizs = df_copy['세부사업명'].values
-    stats = df_copy['통계목명'].values
-    types = df_copy['예산구분'].values
+    # 🌟 1단계: 추경/경정 대체 제외를 최우선 판별!
+    # 동일 부서+세부사업+통계목+norm_name 그룹에서 최신 sort_key가 아닌 구버전 행 전부 '🔄 경정 대체 제외'
+    group_cols = ['부서명', '세부사업명', '통계목명', 'norm_name']
+    idx_latest = df_copy.groupby(group_cols)['sort_key'].idxmax()
+    latest_set = set(idx_latest.values)
 
-    n = len(df_copy)
+    for idx in df_copy.index:
+        if idx not in latest_set:
+            df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
+
+    # 🌟 2단계: 최신 활성 행(✅ 정산 포함) 내에서 동그라미 소계 중복 감지!
+    active_mask = df_copy['정산 상태'] == '✅ 정산 포함'
+    active_df = df_copy[active_mask].copy()
+
+    names = active_df['산출근거명'].astype(str).values
+    budgets = active_df['예산액_num'].values
+    depts = active_df['부서명'].values
+    bizs = active_df['세부사업명'].values
+    stats = active_df['통계목명'].values
+    types = active_df['예산구분'].values
+    active_indices = active_df.index.tolist()
+
+    n = len(active_df)
     circle_excluded_indices = set()
 
     i = 0
@@ -205,27 +222,13 @@ def load_and_prepare_year_data(year):
                 j += 1
 
             if small_cnt > 0 and (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.03):
-                circle_excluded_indices.add(i)
+                circle_excluded_indices.add(active_indices[i])
                 i = j
                 continue
         i += 1
 
-    df_copy.loc[list(circle_excluded_indices), '정산 상태'] = '🔻 소계 중복 제외'
-
-    # 2단계: 경정 대체 이력 중복 마킹
-    non_circle_mask = df_copy['정산 상태'] == '✅ 정산 포함'
-    non_circle_df = df_copy[non_circle_mask].copy()
-
-    non_circle_df['norm_name'] = non_circle_df['산출근거명'].apply(normalize_item_name)
-    non_circle_df['sort_key'] = non_circle_df['예산구분'].apply(get_budget_type_sort_key)
-
-    group_cols = ['부서명', '세부사업명', '통계목명', 'norm_name']
-    idx_latest = non_circle_df.groupby(group_cols)['sort_key'].idxmax()
-    latest_set = set(idx_latest.values)
-
-    for idx in non_circle_df.index:
-        if idx not in latest_set:
-            df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
+    for idx in circle_excluded_indices:
+        df_copy.loc[idx, '정산 상태'] = '🔻 소계 중복 제외'
 
     return df_copy
 
