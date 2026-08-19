@@ -200,7 +200,7 @@ def normalize_item_name(name):
     s_clean = s_no_paren.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 
-@st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
+@st.cache_data(show_spinner=False)
 def load_and_prepare_year_data(year):
     df = data_manager.load_year_data(year)
     if df.empty:
