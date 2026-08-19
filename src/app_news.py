@@ -227,7 +227,7 @@ def deduplicate_news_items(items):
     return clusters
 
 # ==========================================
-# 3. 네이버 및 순수 소셜 수집 엔진 (뉴스 기사 링크 100% 필터링)
+# 3. 순수 단일 키워드 검색 엔진 (네이버, 유튜브, 인스타그램, 쓰레드)
 # ==========================================
 @st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
@@ -236,9 +236,8 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     url = f"https://openapi.naver.com/v1/search/{target}.json"
     headers = {"X-Naver-Client-Id": CLIENT_ID, "X-Naver-Client-Secret": CLIENT_SECRET}
     
-    adjusted_query = f"용인 {query}" if target == "cafearticle" and "용인" not in query else query
-    enc_text = urllib.parse.quote(adjusted_query)
-    
+    # 🌟 임의 접두어('용인') 제거 - 100% 선택한 순수 키워드로만 검색
+    enc_text = urllib.parse.quote(query)
     fetch_limit = 100 if target == "news" else display_cnt
     request_url = f"{url}?query={enc_text}&display={fetch_limit}&sort={sort_type}"
     
@@ -250,7 +249,7 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
         pass
     return []
 
-# 📺 3-1. 유튜브 전용 수집 엔진
+# 📺 3-1. 유튜브 순수 키워드 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_youtube_data(query, max_results=10):
     items = []
@@ -260,7 +259,7 @@ def fetch_youtube_data(query, max_results=10):
             search_url = "https://www.googleapis.com/youtube/v3/search"
             params = {
                 "key": YOUTUBE_API_KEY,
-                "q": f"용인 {query}",
+                "q": query, # 순수 키워드로만 검색
                 "part": "snippet",
                 "maxResults": max_results,
                 "type": "video",
@@ -287,7 +286,7 @@ def fetch_youtube_data(query, max_results=10):
             pass
             
     try:
-        fallback_url = f"https://www.youtube.com/results?search_query={urllib.parse.quote('용인 ' + query)}"
+        fallback_url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         res = requests.get(fallback_url, headers=headers, timeout=6)
         if res.status_code == 200:
@@ -296,11 +295,11 @@ def fetch_youtube_data(query, max_results=10):
             
             for idx, m in enumerate(matches[:max_results]):
                 v_id, thumb = m[0], m[1].replace("\\u0026", "&")
-                title = titles[idx] if idx < len(titles) else f"용인시 {query} 관련 영상"
+                title = titles[idx] if idx < len(titles) else f"{query} 관련 영상"
                 items.append({
                     "title": title,
-                    "description": f"용인시 시정 동향 키워드 '{query}' 관련 유튜브 소식 영상입니다.",
-                    "channel": "유튜브 시정 동향",
+                    "description": f"키워드 '{query}' 관련 유튜브 영상입니다.",
+                    "channel": "유튜브 동향",
                     "publishedAt": "최근",
                     "link": f"https://www.youtube.com/watch?v={v_id}",
                     "thumbnail": thumb,
@@ -311,15 +310,12 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 시민 작성 순수 인스타그램 & 🧵 쓰레드 개인 직접 링크 전용 수집 엔진 (중복 타이틀 100% 제어)
+# 📸 3-2. 시민 작성 순수 인스타그램 & 🧵 쓰레드 개인 포스트 수집 엔진 (100% 순수 키워드 검색)
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_authentic_personal_sns(platform_name, query, count=10):
     items = []
     platform_key = platform_name.lower()
     clean_kw = query.replace(" ", "")
-    
-    # 중복 키워드 문구 방지 (예: '용인시' 선택 시 '용인시 용인시' 중복 제어)
-    base_prefix = f"'{query}'" if "용인" in query else f"용인시 '{query}'"
     
     if platform_key == "instagram":
         search_q = f'"instagram.com/p/" OR "instagram.com/reel/" "{query}"'
@@ -338,7 +334,7 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
                     if clean_t and not is_news_link(l, t):
                         items.append({
                             "title": clean_t,
-                            "description": f"시민이 인스타그램에 직접 업로드한 {base_prefix} 관련 포토/릴스 개인 포스트입니다.",
+                            "description": f"시민이 인스타그램에 직접 업로드한 '{query}' 관련 개인 포스트입니다.",
                             "link": l,
                             "date": "실시간",
                             "source_type": "instagram"
@@ -378,7 +374,7 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
                     if clean_t and not is_news_link(l, t):
                         items.append({
                             "title": clean_t,
-                            "description": f"시민이 쓰레드(Threads)에 직접 작성한 {base_prefix} 관련 텍스트 포스트입니다.",
+                            "description": f"시민이 쓰레드(Threads)에 직접 작성한 '{query}' 관련 텍스트 포스트입니다.",
                             "link": l,
                             "date": "실시간",
                             "source_type": "threads"
@@ -386,11 +382,10 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
         except Exception:
             pass
             
-        search_target = clean_kw if "용인" in query else f"용인 {query}"
         items.append({
-            "title": f"{base_prefix} 쓰레드(Threads) 포스트",
-            "description": f"쓰레드(Threads)에서 시민들이 {base_prefix} 관련하여 직접 남긴 텍스트 포스트입니다.",
-            "link": f"https://www.threads.net/search?q={urllib.parse.quote(search_target)}",
+            "title": f"'{query}' 쓰레드(Threads) 포스트",
+            "description": f"쓰레드(Threads)에서 시민들이 '{query}' 관련하여 직접 남긴 텍스트 포스트입니다.",
+            "link": f"https://www.threads.net/search?q={urllib.parse.quote(query)}",
             "date": "실시간 피드",
             "source_type": "threads"
         })
@@ -586,7 +581,7 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
 
-    # [탭 3] 순수 시민 작성 인스타그램 & 쓰레드 전용 SNS 탭
+    # [탭 3] 순수 시민 작성 인스타그램 & 쓰레드 전용 SNS 탭 (100% 선택 키워드 단일 검색)
     with tab_sns:
         col_insta, col_threads = st.columns(2)
         
