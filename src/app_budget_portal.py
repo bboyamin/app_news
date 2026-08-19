@@ -200,7 +200,7 @@ def normalize_item_name(name):
     s_clean = s.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 @st.cache_data(show_spinner=False)
-def load_and_prepare_year_data(year, cache_version="v2.9"):
+def load_and_prepare_year_data(year, cache_version="v3.0"):
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
@@ -279,8 +279,11 @@ def load_and_prepare_year_data(year, cache_version="v2.9"):
     for (dept, biz, tong, norm_val), group in non_circle_df.groupby(['부서명', '세부사업명', '통계목명', 'norm_name'], sort=False):
         if len(group['sort_key'].unique()) > 1:
             max_sort = group['sort_key'].max()
-            replaced = group[group['sort_key'] < max_sort]
-            superseded_indices.update(replaced.index)
+            chu_items = group[group['sort_key'] == max_sort]
+            has_gyeongjeong = any('경정' in str(r['산출근거식']) for _, r in chu_items.iterrows())
+            if has_gyeongjeong:
+                replaced = group[group['sort_key'] < max_sort]
+                superseded_indices.update(replaced.index)
 
     for (dept, biz, tong), group in non_circle_df.groupby(['부서명', '세부사업명', '통계목명'], sort=False):
         u_types = group['sort_key'].unique()
@@ -296,14 +299,15 @@ def load_and_prepare_year_data(year, cache_version="v2.9"):
 
                 exact_m = prev_items[prev_items['norm_name'] == c_norm]
                 if not exact_m.empty:
-                    superseded_indices.update(exact_m.index)
+                    if '경정' in f or len(chu_items) == len(prev_items):
+                        superseded_indices.update(exact_m.index)
                 elif '경정' in f or '성립전' in f or '성립전' in name or '간주' in f or '간주' in name:
                     if len(chu_items) == 1 and len(prev_items) == 1 and ('경정' in f or f in ['-', '']):
                         superseded_indices.update(prev_items.index)
                     else:
                         for p_idx, p_row in prev_items.iterrows():
                             p_norm = p_row['norm_name']
-                            if ('출전' in c_norm and '출전' in p_norm) or ('워크숍' in c_norm and '워크숍' in p_norm) or ('시설관리위탁' in c_norm and '자산및물품' in p_norm) or ('지역화폐' in c_norm and '지역화폐' in p_norm):
+                            if ('출전' in c_norm and '출전' in p_norm) or ('워크숍' in c_norm and '워크숍' in p_norm) or ('시설관리위탁' in c_norm and '자산및물품' in p_norm) or ('지역화폐' in c_norm and '지역화폐' in p_norm) or ('체육센터' in c_norm and '체육센터' in p_norm) or ('시민정보화' in c_norm and '시민정보화' in p_norm) or ('일반수용비' in c_norm and '일반수용비' in p_norm) or ('급식비' in c_norm and '급식비' in p_norm) or ('기본업무추진' in c_norm and '기본업무추진' in p_norm) or ('31인' in c_norm and '31인' in p_norm) or ('사무용' in c_norm and '사무용' in p_norm):
                                 superseded_indices.add(p_idx)
 
     for idx in superseded_indices:
