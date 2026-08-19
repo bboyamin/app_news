@@ -312,7 +312,7 @@ def render_top_highlight_bar_chart(df_data, x_col, y_col, y_label="예산액 (�
         st.bar_chart(chart_df)
 
 # ==========================================
-# 2. 사이드바 - 회계연도 선택 & CSV 업로드 관리
+# 2. 사이드바 - 회계연도 선택 & 관리자 비밀번호 보호 모듈
 # ==========================================
 st.sidebar.markdown("## 🔍 예산 검색 설정")
 
@@ -329,37 +329,45 @@ selected_year = st.sidebar.selectbox(
 # 데이터 로드 (0.001초 RAM 초고속 캐싱 적용)
 df_year = load_and_prepare_year_data(selected_year)
 
-# 사이드바: 최신 예산서 CSV 직접 업로드 모듈
+# 사이드바: 🔒 비밀번호 0914로 잠긴 관리자 예산서 데이터 관리 모듈
 st.sidebar.markdown("---")
-with st.sidebar.expander("📤 [관리자] 새 예산서 CSV 업로드", expanded=False):
-    st.caption("예산편성 후 최종 합본예산서 CSV 파일을 업로드하시면 연도별로 자동 정제·적용됩니다.")
-    upload_year = st.number_input("등록할 연도", min_value=2020, max_value=2035, value=selected_year+1, step=1)
-    uploaded_file = st.file_uploader("합본예산서 CSV 파일 선택", type=["csv"])
+with st.sidebar.expander("🔒 [관리자] 예산서 데이터 관리", expanded=False):
+    admin_pw = st.text_input("🔑 관리자 비밀번호", type="password", key="admin_pw_input", placeholder="비밀번호 입력")
     
-    if uploaded_file is not None:
-        if st.button("💾 데이터 자동 정제 및 저장 적용", type="primary", use_container_width=True):
-            try:
-                cnt = data_manager.save_uploaded_budget_file(uploaded_file, upload_year)
-                st.cache_data.clear()
-                st.success(f"🎉 {upload_year}년 예산서 {cnt:,}건 무결 정제 등록 완료!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"⚠️ 업로드 정제 실패: {e}")
+    if admin_pw == "0914":
+        st.success("🔓 관리자 인증이 완료되었습니다.")
+        st.caption("예산편성 후 최종 합본예산서 CSV 파일을 업로드하시면 연도별로 자동 정제·적용됩니다.")
+        upload_year = st.number_input("등록할 연도", min_value=2020, max_value=2035, value=selected_year+1, step=1)
+        uploaded_file = st.file_uploader("합본예산서 CSV 파일 선택", type=["csv"])
+        
+        if uploaded_file is not None:
+            if st.button("💾 데이터 자동 정제 및 저장 적용", type="primary", use_container_width=True):
+                try:
+                    cnt = data_manager.save_uploaded_budget_file(uploaded_file, upload_year)
+                    st.cache_data.clear()
+                    st.success(f"🎉 {upload_year}년 예산서 {cnt:,}건 무결 정제 등록 완료!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"⚠️ 업로드 정제 실패: {e}")
 
-    # 등록된 연도 목록 및 안전 삭제 모듈
-    st.markdown("---")
-    st.caption("📂 저장된 연도별 예산서 목록")
-    for y in available_years:
-        col_y1, col_y2 = st.columns([3, 1])
-        col_y1.write(f"• {y}년 예산서")
-        if col_y2.button("삭제", key=f"del_{y}"):
-            if len(available_years) <= 1:
-                st.sidebar.warning("⚠️ 최소 1개 이상의 예산서 데이터가 유지되어야 합니다.")
-            else:
-                data_manager.delete_year_data(y)
-                st.cache_data.clear()
-                st.sidebar.success(f"🗑️ {y}년 예산서 데이터 삭제 완료!")
-                st.rerun()
+        # 등록된 연도 목록 및 안전 삭제 모듈
+        st.markdown("---")
+        st.caption("📂 저장된 연도별 예산서 목록")
+        for y in available_years:
+            col_y1, col_y2 = st.columns([3, 1])
+            col_y1.write(f"• {y}년 예산서")
+            if col_y2.button("삭제", key=f"del_{y}"):
+                if len(available_years) <= 1:
+                    st.sidebar.warning("⚠️ 최소 1개 이상의 예산서 데이터가 유지되어야 합니다.")
+                else:
+                    data_manager.delete_year_data(y)
+                    st.cache_data.clear()
+                    st.sidebar.success(f"🗑️ {y}년 예산서 데이터 삭제 완료!")
+                    st.rerun()
+    elif admin_pw.strip() != "":
+        st.error("🔒 비밀번호가 일치하지 않습니다.")
+    else:
+        st.info("💡 비밀번호(0914)를 입력하시면 예산서 CSV 업로드 및 삭제 기능이 활성화됩니다.")
 
 # ==========================================
 # 3. 메인 페이지 헤더
