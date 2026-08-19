@@ -298,75 +298,90 @@ if search_keyword.strip():
     search_df = search_df[final_mask]
 
 # ==========================================
-# 🌟 5. 다층(2-Layer) 예산 중복 정밀 정산 엔진
-# Layer 1: 큰 동그라미(소계 헤더) vs 작은 동그라미(세부내역) 합산 중복 제거
+# 🌟 5. 다층(2-Layer) 예산 중복 정밀 정산 및 시각적 라벨링 엔진
+# Layer 1: 큰 동그라미(소계 헤더) vs 작은 동그라미(세부내역) 합산 중복 감지
 # Layer 2: 본예산 vs 추경(경정) 최신 버전 통합 정산
 # ==========================================
 def is_big_circle(name):
     s = str(name).strip()
     return bool(re.match(r'^[○Ο●◎◆■□]', s))
 
-def is_small_circle(name):
-    s = str(name).strip()
-    return bool(re.match(r'^[οo\-▪ㆍ･-]', s))
-
-def deduplicate_circle_hierarchy(target_df):
+def mark_deduplication_status(target_df, is_all_budget_types=True):
     """
-    큰 동그라미(소계 항목) 뒤에 연속되는 작은 동그라미들(세부 내역)의 예산 합이 큰 동그라미 예산액과 동일할 경우,
-    소계 헤더(큰 동그라미)의 예산액 중복 합산을 정밀 제외합니다.
+    모든 예산 항목에 대한 정산 합산 상태를 라벨링합니다.
+    - ✅ 정산 합산 포함: 실제 최종 예산 합계에 포함되는 활성 항목
+    - 🔻 소계 중복 제외: 하위 세부내역 합과 일치하는 상위 소계 헤더 항목 (분홍색 강조)
+    - 🔄 경정 대체 제외: 추경/경정으로 대체된 이전 버전 본예산 항목 (주황색 강조)
     """
     if target_df.empty:
-        return target_df
-    
-    records = target_df.to_dict('records')
-    excluded = set()
-    
-    i = 0
-    n = len(records)
-    while i < n:
-        c_name = records[i]['산출근거명']
-        if is_big_circle(c_name):
-            big_budget = records[i]['예산액_num']
-            small_sum = 0
-            small_idx = []
-            j = i + 1
-            while j < n and is_small_circle(records[j]['산출근거명']):
-                small_sum += records[j]['예산액_num']
-                small_idx.append(j)
-                j += 1
-            if small_idx and (abs(small_sum - big_budget) < 1.0 or big_budget == small_sum):
-                excluded.add(i)
-                i = j
-                continue
-        i += 1
-        
-    valid = [records[k] for k in range(n) if k not in excluded]
-    return pd.DataFrame(valid)
+        df_copy = target_df.copy()
+        df_copy['정산 상태'] = []
+        return 0.0, df_copy, df_copy
 
-def calculate_accurate_budget_sum(target_df, is_all_budget_types=True):
-    if target_df.empty:
-        return 0.0, target_df
+    df_copy = target_df.copy()
+    df_copy['정산 상태'] = '✅ 정산 합산 포함'
+    
+    # 1단계: 동그라미 계층 구조 소계 중복 감지
+    circle_excluded_idx = set()
+    for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
+        records = group.to_dict('records')
+        orig_indices = group.index.tolist()
+        n = len(records)
+        i = 0
+        while i < n:
+            c_name = records[i]['산출근거명']
+            if is_big_circle(c_name):
+                big_budget = records[i]['예산액_num']
+                small_sum = 0
+                small_indices = []
+                j = i + 1
+                while j < n:
+                    next_name = records[j]['산출근거명']
+                    if is_big_circle(next_name):
+                        break
+                    small_sum += records[j]['예산액_num']
+                    small_indices.append(j)
+                    j += 1
+                
+                # 하위 항목 합이 존재하고, 큰 동그라미 금액과 5% 오차 또는 5천원 범위 내 일치 시 소계 제외
+                if small_indices and (abs(small_sum - big_budget) <= 5 or abs(small_sum - big_budget) / max(big_budget, 1) <= 0.03):
+                    circle_excluded_idx.add(orig_indices[i])
+                    i = j
+                    continue
+            i += 1
+            
+    for idx in circle_excluded_idx:
+        df_copy.loc[idx, '정산 상태'] = '🔻 소계 중복 제외'
         
-    # 1단계: 동그라미 계층 구조 소계 중복 제거
-    cleaned_df = deduplicate_circle_hierarchy(target_df)
+    non_circle_df = df_copy[df_copy['정산 상태'] == '✅ 정산 합산 포함'].copy()
     
     if not is_all_budget_types:
-        return float(cleaned_df['예산액_num'].sum()), cleaned_df
+        accurate_sum = float(non_circle_df['예산액_num'].sum())
+        return accurate_sum, non_circle_df, df_copy
         
-    # 2단계: '전체' 예산구분 시 추경/경정 최신 버전 통합
-    temp = cleaned_df.copy()
-    temp['sort_key'] = temp['예산구분'].apply(get_budget_type_sort_key)
-    
+    # 2단계: '전체' 예산구분 시 추경/경정 최신 버전 통합 정산
+    non_circle_df['sort_key'] = non_circle_df['예산구분'].apply(get_budget_type_sort_key)
     group_cols = ['부서명', '세부사업명', '통계목명', '산출근거명']
-    idx_latest = temp.groupby(group_cols)['sort_key'].idxmax()
-    latest_df = temp.loc[idx_latest]
     
+    idx_latest = non_circle_df.groupby(group_cols)['sort_key'].idxmax()
+    latest_indices_set = set(idx_latest.values)
+    
+    for idx in non_circle_df.index:
+        if idx not in latest_indices_set:
+            df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
+            
+    latest_df = non_circle_df.loc[idx_latest]
     accurate_sum = float(latest_df['예산액_num'].sum())
-    return accurate_sum, latest_df
+    
+    return accurate_sum, latest_df, df_copy
 
 is_all_types_selected = (sel_budget_type == "전체")
-total_budget_thousand, latest_dedup_df = calculate_accurate_budget_sum(search_df, is_all_budget_types=is_all_types_selected)
+total_budget_thousand, latest_dedup_df, search_df_with_status = mark_deduplication_status(search_df, is_all_budget_types=is_all_types_selected)
 total_budget_billion = total_budget_thousand / 100000.0
+
+# 제외된 항목 카운트 계산
+subtotal_ex_count = (search_df_with_status['정산 상태'] == '🔻 소계 중복 제외').sum()
+gyeongjeong_ex_count = (search_df_with_status['정산 상태'] == '🔄 경정 대체 제외').sum()
 
 col_m1, col_m2, col_m3 = st.columns(3)
 
@@ -379,7 +394,7 @@ with col_m1:
     """, unsafe_allow_html=True)
 
 with col_m2:
-    badge_sub_label = "(소계 및 경정 중복정산 반영)" if is_all_types_selected else f"({sel_budget_type} 소계중복 정산)"
+    badge_sub_label = f"(소계 제외 {subtotal_ex_count}건, 경정 대체 {gyeongjeong_ex_count}건 정산)"
     st.markdown(f"""
     <div class="metric-badge">
         <div class="metric-label">실효 예산 정산 합계 <span style="font-size:11px; color:#2563eb;">{badge_sub_label}</span></div>
@@ -398,16 +413,16 @@ with col_m3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # 검색 결과 테이블용 컬럼 정의
-display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액_num', '의무/재량구분']
+display_cols = ['정산 상태', '예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액_num', '의무/재량구분']
 
 col_t1, col_t2 = st.columns([4, 1])
 with col_t1:
-    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건 - 본예산/추경 및 세부 산출내역 전체 표출)")
+    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건 - 세부내역 및 이력 100% 표출)")
 with col_t2:
     safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
     download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
     
-    download_df = search_df[display_cols].copy()
+    download_df = search_df_with_status[display_cols].copy()
     download_df['예산액(천원)'] = download_df['예산액_num'].apply(lambda x: f"{int(x):,}")
     download_df = download_df.drop(columns=['예산액_num'])
     
@@ -421,19 +436,42 @@ with col_t2:
         key="btn_download_csv"
     )
 
-# 테이블 표출
-total_cnt = len(search_df)
-show_table_df = search_df[display_cols].head(200).copy()
+# 🎨 테이블 상단 정산 색상 구별 범례 안내 바
+st.markdown("""
+<div style="margin-bottom: 10px; font-size: 13px; font-weight: 600; display: flex; gap: 14px; align-items: center; background: #ffffff; padding: 10px 16px; border-radius: 8px; border: 1px solid #cbd5e1; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+    <span style="color: #1e3a8a;">🎨 <b>정산 합산 구별 범례:</b></span>
+    <span style="background: #ffffff; border: 1px solid #cbd5e1; padding: 3px 10px; border-radius: 6px; color: #0f172a;">✅ <b>정산 합산 포함</b> (실제 집계)</span>
+    <span style="background: #ffeef0; border: 1px solid #fca5a5; padding: 3px 10px; border-radius: 6px; color: #991b1b;">🔻 <b>소계 중복 제외</b> (소계 헤더)</span>
+    <span style="background: #fff7ed; border: 1px solid #fdba74; padding: 3px 10px; border-radius: 6px; color: #9a3412;">🔄 <b>경정 대체 제외</b> (이전 본예산 이력)</span>
+</div>
+""", unsafe_allow_html=True)
+
+# 테이블 표출 (스타일 적용)
+total_cnt = len(search_df_with_status)
+show_table_df = search_df_with_status[display_cols].head(200).copy()
 show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
 
 if total_cnt > 200:
     st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
 
+# 행 단위 색상 스타일링 함수
+def highlight_dedup_rows(row):
+    status = str(row['정산 상태'])
+    if '소계 중복 제외' in status:
+        return ['background-color: #ffeef0; color: #991b1b; font-weight: 600;'] * len(row)
+    elif '경정 대체 제외' in status:
+        return ['background-color: #fff7ed; color: #9a3412; font-weight: 600;'] * len(row)
+    else:
+        return ['background-color: #ffffff; color: #0f172a;'] * len(row)
+
+styled_table = show_table_df.style.apply(highlight_dedup_rows, axis=1)
+
 st.dataframe(
-    show_table_df,
+    styled_table,
     use_container_width=True,
-    height=420,
+    height=450,
     column_config={
+        "정산 상태": st.column_config.TextColumn("정산 상태", width="medium"),
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
             format="%,d",
