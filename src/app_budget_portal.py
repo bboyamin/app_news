@@ -135,7 +135,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚡ 1. 초고속 정산 연산 및 RAM 캐싱 엔진
+# ⚡ 1. 초고속 무결 정산 연산 및 RAM 캐싱 엔진
 # ==========================================
 big_circle_pattern = re.compile(r'^[○Ο●◎◆■□]')
 
@@ -168,8 +168,8 @@ def normalize_item_name(name):
 @st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
     """
-    1단계: 순차적 동그라미 소계 중복 감지 (Big Circle 바로 뒤에 연결된 Small Circle만 바인딩)
-    2단계: 정규화 명칭 기반 경정 대체 버전 통합 정산 (괄호/부가문구 유사 매칭)
+    1단계: 순차적 동그라미 계층 구조 소계 중복 감지 (Big Circle 직후 연결된 Small Circle만 세부항목 바인딩)
+    2단계: 서로 다른 예산구분(본예산 vs 추경) 간에만 최신 버전 경정 대체 마킹 (동일 예산구분 내 국도비/자체재원 병렬 유지)
     """
     df = data_manager.load_year_data(year)
     if df.empty:
@@ -208,18 +208,20 @@ def load_and_prepare_year_data(year):
     for idx in circle_excluded_indices:
         df_copy.loc[idx, '정산 상태'] = '🔻 소계 중복 제외'
 
-    # 2단계: 정규화 경정 대체 버전 통합 정산 (소계 제외가 아닌 활성 항목 대상)
+    # 2단계: 서로 다른 예산구분 간에만 최신버전 대체!
     non_circle_df = df_copy[df_copy['정산 상태'] == '✅ 정산 포함'].copy()
     non_circle_df['norm_name'] = non_circle_df['산출근거명'].apply(normalize_item_name)
     non_circle_df['sort_key'] = non_circle_df['예산구분'].apply(get_budget_type_sort_key)
 
     group_cols = ['부서명', '세부사업명', '통계목명', 'norm_name']
-    idx_latest = non_circle_df.groupby(group_cols)['sort_key'].idxmax()
-    latest_set = set(idx_latest.values)
+    group_max_sort = non_circle_df.groupby(group_cols)['sort_key'].transform('max')
 
-    for idx in non_circle_df.index:
-        if idx not in latest_set:
-            df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
+    # 동일 그룹 내에서 실제로 더 높은 sort_key(추경)가 존재하는 이전 예산구분(본예산) 행만 제외
+    superseded_mask = (non_circle_df['sort_key'] < group_max_sort)
+    superseded_indices = non_circle_df[superseded_mask].index
+
+    for idx in superseded_indices:
+        df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
 
     return df_copy
 
