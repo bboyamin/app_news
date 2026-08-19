@@ -384,9 +384,10 @@ if df_year.empty:
     st.warning(f"⚠️ {selected_year}년도 예산서 데이터가 삭제되었거나 존재하지 않습니다. 사이드바 '🔒 [관리자] 예산서 데이터 관리' 메뉴에서 비밀번호(0914)를 입력하신 후 새로운 CSV 예산서 파일을 업로드해 주세요.")
     st.stop()
 
-valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
-acct_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
-all_accts = ["전체"] + acct_order
+raw_acct_list = [str(a).strip() for a in df_year['회계명'].dropna().unique() if str(a).strip() not in ['-', 'nan', 'N/A', '0', '']]
+acct_sums = df_year.groupby('회계명')['예산액_num'].sum()
+sorted_acct_list = sorted(raw_acct_list, key=lambda a: acct_sums.get(a, 0), reverse=True)
+all_accts = ["전체"] + sorted_acct_list
 
 csv_dept_list = []
 for d in df_year['부서명'].dropna().unique():
