@@ -11,6 +11,13 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from dotenv import load_dotenv
 
+# 유튜브 자막 추출 패키지 로드 시도
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+    HAS_YT_TRANSCRIPT = True
+except Exception:
+    HAS_YT_TRANSCRIPT = False
+
 # ==========================================
 # 0. 초기 세팅 및 네트워크 최적화
 # ==========================================
@@ -141,7 +148,54 @@ def save_keywords():
         json.dump(st.session_state.keywords, f, ensure_ascii=False)
 
 # ==========================================
-# 2. 강력한 다층(Multi-Layer) 중복 제거 알고리즘
+# 2. 자막 추출 모듈 (YouTube Subtitles Parser)
+# ==========================================
+def extract_youtube_transcript(video_url):
+    """
+    유튜브 영상 링크에서 한국어/자동생성 자막 전문 스크립트를 추출합니다.
+    """
+    if not HAS_YT_TRANSCRIPT or not video_url:
+        return ""
+        
+    v_match = re.search(r'(?:v=|\/)([0-9A-Za-z_-]{11})', video_url)
+    if not v_match:
+        return ""
+        
+    video_id = v_match.group(1)
+    
+    try:
+        api = YouTubeTranscriptApi()
+        transcript_list = api.list(video_id)
+        
+        target_t = None
+        for t in transcript_list:
+            if t.language_code in ['ko', 'ko-KR']:
+                target_t = t
+                break
+                
+        if not target_t:
+            for t in transcript_list:
+                if t.is_translatable:
+                    target_t = t.translate('ko')
+                    break
+                    
+        if not target_t:
+            for t in transcript_list:
+                target_t = t
+                break
+                
+        if target_t:
+            fetched = target_t.fetch()
+            texts = [item['text'] for item in fetched]
+            full_text = ' '.join(texts)
+            return full_text[:3500] # 주요 자막 전문 3500자 파싱
+    except Exception:
+        pass
+        
+    return ""
+
+# ==========================================
+# 3. 강력한 다층(Multi-Layer) 중복 제거 알고리즘
 # ==========================================
 MAJOR_MEDIA_LIST = [
     "연합뉴스", "KBS", "SBS", "MBC", "YTN", "조선일보", "중앙일보", "동아일보", 
@@ -227,7 +281,7 @@ def deduplicate_news_items(items):
     return clusters
 
 # ==========================================
-# 3. 순수 단일 키워드 검색 엔진 (네이버, 유튜브, 인스타그램, 쓰레드)
+# 4. 순수 단일 키워드 수집 엔진 (네이버, 유튜브, 인스타그램, 쓰레드)
 # ==========================================
 @st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
@@ -236,7 +290,6 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     url = f"https://openapi.naver.com/v1/search/{target}.json"
     headers = {"X-Naver-Client-Id": CLIENT_ID, "X-Naver-Client-Secret": CLIENT_SECRET}
     
-    # 🌟 임의 접두어('용인') 제거 - 100% 선택한 순수 키워드로만 검색
     enc_text = urllib.parse.quote(query)
     fetch_limit = 100 if target == "news" else display_cnt
     request_url = f"{url}?query={enc_text}&display={fetch_limit}&sort={sort_type}"
@@ -249,7 +302,7 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
         pass
     return []
 
-# 📺 3-1. 유튜브 순수 키워드 수집 엔진
+# 📺 4-1. 유튜브 순수 키워드 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_youtube_data(query, max_results=10):
     items = []
@@ -259,7 +312,7 @@ def fetch_youtube_data(query, max_results=10):
             search_url = "https://www.googleapis.com/youtube/v3/search"
             params = {
                 "key": YOUTUBE_API_KEY,
-                "q": query, # 순수 키워드로만 검색
+                "q": query,
                 "part": "snippet",
                 "maxResults": max_results,
                 "type": "video",
@@ -310,7 +363,7 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 시민 작성 순수 인스타그램 & 🧵 쓰레드 개인 포스트 수집 엔진 (100% 순수 키워드 검색)
+# 📸 4-2. 시민 작성 순수 인스타그램 & 🧵 쓰레드 개인 포스트 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_authentic_personal_sns(platform_name, query, count=10):
     items = []
@@ -393,17 +446,24 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
     return items[:count]
 
 # ==========================================
-# 4. 고품격 AI 심층 브리핑 & 리스크 분석 모듈
+# 5. 고품격 AI 심층 브리핑 & 리스크 분석 모듈 (자막 파싱 포함)
 # ==========================================
-def analyze_content_with_factchat(title, description):
+def analyze_content_with_factchat(title, description, source_type="news", link=""):
     if not FACTCHAT_API_KEY or not FACTCHAT_BASE_URL:
         return {"summary": "API 설정 누락", "is_negative": False, "point": ""}
-        
+
+    # 🌟 유튜브 영상일 경우 실시간 영상 자막 추출 파이프라인 작동
+    transcript_info = ""
+    if source_type == "youtube" and link:
+        transcript_text = extract_youtube_transcript(link)
+        if transcript_text:
+            transcript_info = f"\n\n[🎬 추출된 유튜브 영상 실제 자막 전문 스크립트]:\n{transcript_text}"
+
     system_prompt = """너는 20년 경력의 공공기관 수석 시정 모니터링 분석가이다.
-제시된 기사, SNS(인스타그램/쓰레드/유튜브) 및 민원/여론 게시글을 정밀 분석하여, 단체장 및 실무자가 15초 만에 핵심 현황과 대응 포인트를 파악할 수 있도록 '고품격 시정 종합 브리핑'을 작성하라.
+제시된 기사, 소셜 포스트, 또는 유튜브 영상(자막 전문 스크립트 포함)을 정밀 분석하여, 단체장 및 실무자가 15초 만에 핵심 현황과 대응 포인트를 파악할 수 있도록 '고품격 시정 종합 브리핑'을 작성하라.
 
 [분석 가이드라인 - 절대 준수]:
-1. **📌 [시정 핵심 브리핑]**: 딱딱한 1, 2, 3번 목록 대신, 사건의 주요 배경, 핵심 사실 및 구체적 수치/사업 규격이 자연스럽게 연결되는 2~3개 고급 단락(총 3~5문장)으로 풍부하게 작성하라.
+1. **📌 [시정 핵심 브리핑]**: 딱딱한 1, 2, 3번 목록 대신, 사건의 주요 배경, 핵심 사실 및 구체적 수치/사업 규격(유튜브 자막이 제공된 경우 영상 발언 내용 정밀 포함)이 자연스럽게 연결되는 2~3개 고급 단락(총 3~5문장)으로 풍부하게 작성하라.
 2. **⚠️ [민원/갈등/리스크 판단 및 요점]**:
    - 시민의 부정적 민원, 갈등, 비판, 정책 불만, 시정 위험 요소가 있는 경우 `is_negative`를 `true`로 설정하고, **주요 불만 및 갈등 원인**을 자연스러운 2문장으로 구체적으로 명시하라.
    - 긍정적이거나 일반 보도인 경우 `is_negative`를 `false`로 설정하라.
@@ -417,7 +477,7 @@ def analyze_content_with_factchat(title, description):
 }
 """
     
-    user_prompt = f"제목: {title}\n내용/요약: {description}"
+    user_prompt = f"제목: {title}\n내용/요약: {description}{transcript_info}"
     
     payload = {
         "model": "gpt-5.4",
@@ -441,7 +501,7 @@ def analyze_content_with_factchat(title, description):
         return {"summary": f"요약 분석 중 오류 발생: {e}", "is_negative": False, "point": ""}
 
 # ==========================================
-# 5. 화면 UI 렌더링
+# 6. 화면 UI 렌더링
 # ==========================================
 
 # --- [사이드바 통제실] ---
@@ -543,9 +603,10 @@ if selected_kw:
             else:
                 st.markdown(f'<div class="analysis-card-neutral"><b>🤖 [FACTCHAT 세련된 AI 심층 브리핑]</b>\n{analysis.get("summary")}</div>', unsafe_allow_html=True)
         else:
-            if st.button("🔍 AI 심층 브리핑 및 리스크 분석", key=f"btn_{unique_key}", use_container_width=True):
-                with st.spinner("AI 수석 분석가가 기사/SNS 여론 맥락을 정밀 분석 중..."):
-                    st.session_state.llm_results[link] = analyze_content_with_factchat(title, desc)
+            button_label = "🎬 영상 자막 정밀 AI 요약 분석" if source_type == "youtube" else "🔍 AI 심층 브리핑 및 리스크 분석"
+            if st.button(button_label, key=f"btn_{unique_key}", use_container_width=True):
+                with st.spinner("AI 수석 분석가가 영상 자막 맥락을 정밀 분석 중..." if source_type == "youtube" else "AI 수석 분석가가 기사/SNS 여론 맥락을 정밀 분석 중..."):
+                    st.session_state.llm_results[link] = analyze_content_with_factchat(title, desc, source_type=source_type, link=link)
                     st.rerun()
         st.write("")
 
@@ -581,7 +642,7 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
 
-    # [탭 3] 순수 시민 작성 인스타그램 & 쓰레드 전용 SNS 탭 (100% 선택 키워드 단일 검색)
+    # [탭 3] 순수 시민 작성 인스타그램 & 쓰레드 전용 SNS 탭
     with tab_sns:
         col_insta, col_threads = st.columns(2)
         
@@ -595,7 +656,7 @@ if selected_kw:
             for i, p in enumerate(threads_posts):
                 render_article_card(p, unique_key=f"threads_{selected_kw}_{i}", source_type="threads")
 
-    # [탭 4] 유튜브
+    # [탭 4] 유튜브 (영상 자막 정밀 분석 연동)
     with tab_youtube:
         yt_items = fetch_youtube_data(selected_kw, display_count)
         if yt_items:
