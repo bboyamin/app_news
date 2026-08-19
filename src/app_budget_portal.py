@@ -206,20 +206,22 @@ def load_and_prepare_year_data(year):
     if df.empty:
         return df
 
-    df_copy = df.copy()
+    df_copy = df.reset_index(drop=True).copy()
     df_copy['정산 상태'] = '✅ 정산 포함'
-    parent_headers = [''] * len(df_copy)
+    
+    parent_series = pd.Series('', index=df_copy.index)
     for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
-        names = group['산출근거명'].tolist()
-        orig_indices = group.index.tolist()
+        names = group['산출근거명']
         curr_parent = ''
-        for idx_in_grp, c_name in enumerate(names):
+        group_parents = []
+        for c_name in names:
             lvl = get_symbol_level(c_name)
             if lvl == 1:
                 curr_parent = c_name
-            parent_headers[orig_indices[idx_in_grp]] = curr_parent
+            group_parents.append(curr_parent)
+        parent_series.loc[group.index] = group_parents
 
-    df_copy['parent_header'] = parent_headers
+    df_copy['parent_header'] = parent_series
 
     df_copy['parent_norm'] = df_copy['parent_header'].apply(normalize_item_name)
 
