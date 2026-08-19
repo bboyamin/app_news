@@ -138,9 +138,18 @@ st.markdown("""
 # ⚡ 1. 초고속 무결 정산 연산 및 RAM 캐싱 엔진
 # ==========================================
 big_circle_pattern = re.compile(r'^[○Ο●◎◆■□]')
+small_circle_pattern = re.compile(r'^[οo\-▪]')
+dot_pattern = re.compile(r'^[ㆍ･\*]')
 
-def is_big_circle(name):
-    return bool(big_circle_pattern.match(str(name).strip()))
+def get_symbol_level(name):
+    s = str(name).strip()
+    if big_circle_pattern.match(s):
+        return 1
+    if small_circle_pattern.match(s):
+        return 2
+    if dot_pattern.match(s):
+        return 3
+    return 4
 
 def get_budget_type_sort_key(t_str):
     s = str(t_str).strip()
@@ -168,7 +177,7 @@ def normalize_item_name(name):
 @st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
     """
-    1단계: 대항목 수식 유무 및 하위 항목 존재 여부에 기반한 무결 소계 헤더 중복 감지
+    1단계: Multi-level 3계층(대항목/중항목/소항목) 소계 헤더 자동 차감 엔진
     2단계: 서로 다른 예산구분(본예산 vs 추경) 간에만 최신 버전 경정 대체 마킹
     """
     df = data_manager.load_year_data(year)
@@ -178,7 +187,7 @@ def load_and_prepare_year_data(year):
     df_copy = df.copy()
     df_copy['정산 상태'] = '✅ 정산 포함'
 
-    # 1단계: 순차적 동그라미 계층 구조 소계 중복 감지 (무수식 헤더 + 세부항목 감지)
+    # 1단계: Multi-level 계층 구조 소계 중복 감지
     circle_excluded_indices = set()
     for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
         records = group.to_dict('records')
@@ -186,8 +195,10 @@ def load_and_prepare_year_data(year):
         n = len(records)
         i = 0
         while i < n:
-            c_name = records[i]['산출근거명']
-            if is_big_circle(c_name):
+            curr_name = records[i]['산출근거명']
+            curr_lvl = get_symbol_level(curr_name)
+
+            if curr_lvl in [1, 2]:
                 big_b = records[i]['예산액_num']
                 formula = str(records[i]['산출근거식']).strip()
 
@@ -196,18 +207,19 @@ def load_and_prepare_year_data(year):
                 j = i + 1
                 while j < n:
                     next_name = records[j]['산출근거명']
-                    if is_big_circle(next_name):
+                    next_lvl = get_symbol_level(next_name)
+
+                    if next_lvl <= curr_lvl:
                         break
-                    small_sum += records[j]['예산액_num']
-                    small_cnt += 1
+
+                    if next_lvl == curr_lvl + 1:
+                        small_sum += records[j]['예산액_num']
+                        small_cnt += 1
                     j += 1
 
-                # 하위 세부항목이 존재하는 경우: 수식이 없거나('-') 합이 일치하면 소계 헤더로 판단
                 if small_cnt > 0:
                     if formula in ['-', '', 'nan', 'None'] or (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.03):
                         circle_excluded_indices.add(orig_indices[i])
-                        i = j
-                        continue
             i += 1
 
     for idx in circle_excluded_indices:
@@ -221,7 +233,6 @@ def load_and_prepare_year_data(year):
     group_cols = ['부서명', '세부사업명', '통계목명', 'norm_name']
     group_max_sort = non_circle_df.groupby(group_cols)['sort_key'].transform('max')
 
-    # 동일 그룹 내에서 실제로 더 높은 sort_key(추경)가 존재하는 이전 예산구분(본예산) 행만 제외
     superseded_mask = (non_circle_df['sort_key'] < group_max_sort)
     superseded_indices = non_circle_df[superseded_mask].index
 
@@ -524,7 +535,7 @@ if not search_df.empty:
         with col_s2:
             st.markdown("##### 📋 통계목별 정산 예산 요약표")
             stat_display = stat_group.head(10).copy()
-            stat_display.columns = ['통계목명', '예산합계(천원)', '건수', '예산합계(억원)']
+            stat_display.columns = ['통계목명', '예산합계(억원)', '예산합계(천원)', '건수']
             st.dataframe(
                 stat_display[['통계목명', '예산합계(억원)', '예산합계(천원)', '건수']],
                 use_container_width=True,
@@ -551,7 +562,7 @@ if not search_df.empty:
             
         with col_t2:
             st.markdown("##### 📋 지출 구조 정산 요약표")
-            type_group.columns = ['지출구분', '예산합계(억원)', '예산합계(천원)', '건수'],
+            type_group.columns = ['지출구분', '예산합계(천원)', '건수', '예산합계(억원)']
             st.dataframe(
                 type_group[['지출구분', '예산합계(억원)', '예산합계(천원)', '건수']],
                 use_container_width=True,
