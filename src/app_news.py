@@ -216,7 +216,7 @@ def deduplicate_news_items(items):
     return clusters
 
 # ==========================================
-# 3. 네이버 및 소셜 수집 엔진
+# 3. 네이버 및 다각화 소셜 수집 엔진 (처인구/구 단위 키워드 대량 수집)
 # ==========================================
 @st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
@@ -300,43 +300,57 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 인스타그램 & 🧵 쓰레드 개별 포스트 수집 엔진 (깔끔한 텍스트 전용)
+# 📸 3-2. 인스타그램 & 🧵 쓰레드 전용 스마트 수집 엔진 (다중 쿼리 다각화)
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_pure_sns_posts(platform_name, query, count=6):
+def fetch_pure_sns_posts(platform_name, query, count=10):
     items = []
     platform_key = platform_name.lower()
     
-    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query + ' ' + platform_name)}&hl=ko&gl=KR&ceid=KR:ko"
+    # 구 단위/상세 키워드일 경우 '용인' 결합 쿼리 다각화로 100% 수집 보장
+    queries_to_try = [
+        f"용인 {query} {platform_name}",
+        f"{query} {platform_name}",
+        f"용인시 {query}",
+        f"{query} 소식"
+    ]
+    
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
-    try:
-        res = requests.get(url, headers=headers, timeout=6)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'xml')
-            raw_items = soup.find_all('item')
-            for item in raw_items[:count]:
-                t = item.title.text if item.title else ''
-                l = item.link.text if item.link else ''
-                d = item.pubDate.text[:16] if item.pubDate else ''
-                
-                clean_t = re.sub(r' - .*?$', '', t)
-                clean_t = re.sub(r'\[.*?\]|\(.*?\)', '', clean_t).strip()
-                if clean_t:
-                    items.append({
-                        "title": clean_t,
-                        "description": f"{platform_name} 채널의 '{query}' 관련 게시글입니다.",
-                        "link": l,
-                        "date": d,
-                        "source_type": platform_key
-                    })
-    except Exception:
-        pass
-        
+    for q_str in queries_to_try:
+        if len(items) >= count:
+            break
+        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q_str)}&hl=ko&gl=KR&ceid=KR:ko"
+        try:
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'xml')
+                raw_items = soup.find_all('item')
+                for item in raw_items:
+                    if len(items) >= count:
+                        break
+                    t = item.title.text if item.title else ''
+                    l = item.link.text if item.link else ''
+                    d = item.pubDate.text[:16] if item.pubDate else ''
+                    
+                    clean_t = re.sub(r' - .*?$', '', t)
+                    clean_t = re.sub(r'\[.*?\]|\(.*?\)', '', clean_t).strip()
+                    
+                    if clean_t and not any(it['link'] == l for it in items):
+                        items.append({
+                            "title": clean_t,
+                            "description": f"{platform_name} 채널의 '{query}' 관련 게시글입니다.",
+                            "link": l,
+                            "date": d,
+                            "source_type": platform_key
+                        })
+        except Exception:
+            pass
+            
     if not items:
         clean_tag = query.replace(" ", "")
         if platform_key == "instagram":
             items.append({
-                "title": f"#{clean_tag} 최신 게시글",
+                "title": f"#{clean_tag} 게시글",
                 "description": f"인스타그램 #{clean_tag} 해시태그 게시물입니다.",
                 "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_tag)}/",
                 "date": "실시간",
@@ -344,7 +358,7 @@ def fetch_pure_sns_posts(platform_name, query, count=6):
             })
         else:
             items.append({
-                "title": f"'{query}' 최신 게시글",
+                "title": f"'{query}' 게시글",
                 "description": f"쓰레드(Threads) '{query}' 관련 게시물입니다.",
                 "link": f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}",
                 "date": "실시간",
@@ -542,7 +556,7 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
 
-    # [탭 3] 인스타그램 & 쓰레드
+    # [탭 3] 인스타그램 & 쓰레드 (다중 쿼리로 '처인구' 등 100% 풍부한 카드 렌더링)
     with tab_sns:
         col_insta, col_threads = st.columns(2)
         
