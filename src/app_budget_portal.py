@@ -235,7 +235,21 @@ def load_and_prepare_year_data(year):
             curr_name = records[i]['산출근거명']
             curr_lvl = get_symbol_level(curr_name)
 
-            if curr_lvl in [1, 2, 3]:
+            if curr_lvl == 1:
+                j = i + 1
+                has_children = False
+                while j < n:
+                    next_name = records[j]['산출근거명']
+                    next_lvl = get_symbol_level(next_name)
+                    if next_lvl == 1:
+                        break
+                    has_children = True
+                    j += 1
+
+                if has_children:
+                    for k in range(i + 1, j):
+                        circle_excluded_indices.add(orig_indices[k])
+            elif curr_lvl in [2, 3]:
                 big_b = records[i]['예산액_num']
                 formula = str(records[i]['산출근거식']).strip()
 
