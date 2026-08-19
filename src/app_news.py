@@ -311,18 +311,17 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 시민 작성 순수 인스타그램 & 🧵 쓰레드 개인 직접 링크 전용 수집 엔진 (뉴스 언론사 링크 100% 필터링)
+# 📸 3-2. 시민 작성 순수 인스타그램 & 🧵 쓰레드 개인 직접 링크 전용 수집 엔진 (중복 타이틀 100% 제어)
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_authentic_personal_sns(platform_name, query, count=10):
-    """
-    뉴스 기사를 100% 제거하고, 시민들이 인스타그램/쓰레드에 직접 작성한 순수 소셜 포스트 및 딥링크만 엄선합니다.
-    """
     items = []
     platform_key = platform_name.lower()
     clean_kw = query.replace(" ", "")
     
+    # 중복 키워드 문구 방지 (예: '용인시' 선택 시 '용인시 용인시' 중복 제어)
+    base_prefix = f"'{query}'" if "용인" in query else f"용인시 '{query}'"
+    
     if platform_key == "instagram":
-        # 1. 뉴스 기사 100% 필터링된 순수 인스타 공개 파이프라인
         search_q = f'"instagram.com/p/" OR "instagram.com/reel/" "{query}"'
         url = f"https://news.google.com/rss/search?q={urllib.parse.quote(search_q)}&hl=ko&gl=KR&ceid=KR:ko"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -339,7 +338,7 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
                     if clean_t and not is_news_link(l, t):
                         items.append({
                             "title": clean_t,
-                            "description": f"시민이 인스타그램에 직접 업로드한 '{query}' 관련 포토/릴스 개인 포스트입니다.",
+                            "description": f"시민이 인스타그램에 직접 업로드한 {base_prefix} 관련 포토/릴스 개인 포스트입니다.",
                             "link": l,
                             "date": "실시간",
                             "source_type": "instagram"
@@ -347,17 +346,16 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
         except Exception:
             pass
             
-        # 2. 인스타그램 해시태그 개인 포스트 딥링크 보강
         items.append({
-            "title": f"📸 #{clean_kw} 시민 실시간 인스타그램 포스트 모음",
-            "description": f"인스타그램에서 시민들이 #{clean_kw}, #용인특례시, #처인구 해시태그로 직접 공유한 최신 개인 포스트입니다.",
+            "title": f"#{clean_kw} 인스타그램 포스트",
+            "description": f"인스타그램에서 시민들이 #{clean_kw} 해시태그로 직접 공유한 최신 개인 포스트입니다.",
             "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_kw)}/",
             "date": "실시간 피드",
             "source_type": "instagram"
         })
         items.append({
-            "title": f"📸 #{clean_kw}일상 시민 소셜 게시글",
-            "description": f"인스타그램에서 시민들이 #{clean_kw}일상, #{clean_kw}소식 해시태그로 게시한 포스트 모음입니다.",
+            "title": f"#{clean_kw}일상 인스타그램 포스트",
+            "description": f"인스타그램에서 시민들이 #{clean_kw}일상 해시태그로 게시한 포스트입니다.",
             "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_kw + '일상')}/",
             "date": "실시간 피드",
             "source_type": "instagram"
@@ -380,7 +378,7 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
                     if clean_t and not is_news_link(l, t):
                         items.append({
                             "title": clean_t,
-                            "description": f"시민이 쓰레드(Threads)에 직접 작성한 '{query}' 관련 텍스트 피드 포스트입니다.",
+                            "description": f"시민이 쓰레드(Threads)에 직접 작성한 {base_prefix} 관련 텍스트 포스트입니다.",
                             "link": l,
                             "date": "실시간",
                             "source_type": "threads"
@@ -388,10 +386,11 @@ def fetch_authentic_personal_sns(platform_name, query, count=10):
         except Exception:
             pass
             
+        search_target = clean_kw if "용인" in query else f"용인 {query}"
         items.append({
-            "title": f"🧵 용인시 '{query}' 시민 쓰레드(Threads) 포스트 모음",
-            "description": f"쓰레드(Threads)에서 시민들이 '{query}' 관련하여 직접 남긴 텍스트 소셜 피드 모음입니다.",
-            "link": f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}",
+            "title": f"{base_prefix} 쓰레드(Threads) 포스트",
+            "description": f"쓰레드(Threads)에서 시민들이 {base_prefix} 관련하여 직접 남긴 텍스트 포스트입니다.",
+            "link": f"https://www.threads.net/search?q={urllib.parse.quote(search_target)}",
             "date": "실시간 피드",
             "source_type": "threads"
         })
@@ -587,7 +586,7 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
 
-    # [탭 3] 순수 시민 작성 인스타그램 & 쓰레드 전용 SNS 탭 (뉴스 기사 100% 필터링)
+    # [탭 3] 순수 시민 작성 인스타그램 & 쓰레드 전용 SNS 탭
     with tab_sns:
         col_insta, col_threads = st.columns(2)
         
