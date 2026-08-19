@@ -145,7 +145,7 @@ st.markdown("""
 # ⚡ 1. 초고속 무결 정산 연산 및 RAM 캐싱 엔진
 # ==========================================
 big_circle_pattern = re.compile(r'^[○Ο●◎◆■□]')
-small_circle_pattern = re.compile(r'^[οo\-▪]')
+small_circle_pattern = re.compile(r'^[οo\-▪－–—‒―]')
 dot_pattern = re.compile(r'^[ㆍ･\*]')
 
 def get_symbol_level(name):
@@ -235,7 +235,7 @@ def load_and_prepare_year_data(year):
             curr_name = records[i]['산출근거명']
             curr_lvl = get_symbol_level(curr_name)
 
-            if curr_lvl in [1, 2]:
+            if curr_lvl in [1, 2, 3]:
                 big_b = records[i]['예산액_num']
                 formula = str(records[i]['산출근거식']).strip()
 
@@ -255,7 +255,7 @@ def load_and_prepare_year_data(year):
                     j += 1
 
                 if small_cnt > 0:
-                    if formula in ['-', '', 'nan', 'None'] or (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.03):
+                    if formula in ['-', '', 'nan', 'None'] or not formula or (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.05):
                         circle_excluded_indices.add(orig_indices[i])
             i += 1
 
