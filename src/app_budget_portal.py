@@ -414,17 +414,25 @@ if search_keyword.strip():
     search_df = search_df[final_mask]
 
 # ==========================================
-# ⚡ 6. 예산 합계 계산 및 요약 바
+# ⚡ 6. 예산 합계 계산 및 요약 바 (전체/본예산 제외 시 공란 표출)
 # ==========================================
 is_all_types_selected = (sel_budget_type == "전체")
+is_main_budget_selected = (sel_budget_type == "본예산")
 
 if is_all_types_selected:
     included_df = search_df[search_df['정산 상태'] == '✅ 정산 포함']
-else:
+    total_budget_thousand = float(included_df['예산액_num'].sum())
+    total_budget_billion = total_budget_thousand / 100000.0
+    sum_display_str = f"{total_budget_billion:,.2f} 억 원 <span style=\"font-size:13px; font-weight:500; color:#64748b;\">({total_budget_thousand:,.0f} 천원)</span>"
+elif is_main_budget_selected:
     included_df = search_df[search_df['정산 상태'] != '🔻 소계 중복 제외']
-
-total_budget_thousand = float(included_df['예산액_num'].sum())
-total_budget_billion = total_budget_thousand / 100000.0
+    total_budget_thousand = float(included_df['예산액_num'].sum())
+    total_budget_billion = total_budget_thousand / 100000.0
+    sum_display_str = f"{total_budget_billion:,.2f} 억 원 <span style=\"font-size:13px; font-weight:500; color:#64748b;\">({total_budget_thousand:,.0f} 천원)</span>"
+else:
+    # '전체', '본예산' 제외 나머지 항목 선택 시 공란('-') 처리
+    included_df = search_df[search_df['정산 상태'] != '🔻 소계 중복 제외']
+    sum_display_str = "-"
 
 col_m1, col_m2, col_m3 = st.columns(3)
 
@@ -440,7 +448,7 @@ with col_m2:
     st.markdown(f"""
     <div class="metric-badge">
         <div class="metric-label">검색 예산 합계</div>
-        <div class="metric-value">{total_budget_billion:,.2f} 억 원 <span style="font-size:13px; font-weight:500; color:#64748b;">({total_budget_thousand:,.0f} 천원)</span></div>
+        <div class="metric-value">{sum_display_str}</div>
     </div>
     """, unsafe_allow_html=True)
 
