@@ -130,16 +130,6 @@ st.markdown("""
         font-size: 17.5px !important;
         font-weight: 600 !important;
     }
-
-    /* 세부 분석 전용 카드 */
-    .analysis-section-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 20px 24px;
-        margin-top: 18px;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -204,12 +194,10 @@ st.markdown(f"""
 # ==========================================
 # 3. 드롭다운 필터 바 (회계구분 / 소관부서 / 예산확정 순 정렬 예산구분)
 # ==========================================
-# 회계명 정제: '회계'로 끝나는 정제된 명칭을 예산 규모 내림차순으로 정렬
 valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
 acct_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
 all_accts = ["전체"] + acct_order
 
-# 소관 부서 정제: CSV 데이터 원본 부서 100% 보존
 csv_dept_list = []
 for d in df_year['부서명'].dropna().unique():
     d_str = str(d).strip()
@@ -219,7 +207,7 @@ for d in df_year['부서명'].dropna().unique():
 
 all_depts = ["전체"] + csv_dept_list
 
-# 예산확정 날짜/순서 참고 정렬 알고리즘 (본예산 -> 추경1회 -> 추경2회 -> 추경3회... -> 이월예산)
+# 예산확정 순 정렬 알고리즘 (본예산 -> 추경1회 -> 추경2회 -> 추경3회... -> 이월예산)
 raw_type_list = [str(t).strip() for t in df_year['예산구분'].dropna().unique() if str(t).strip() not in ['-', 'nan', 'N/A', '']]
 
 def get_budget_type_sort_key(t_str):
@@ -293,18 +281,12 @@ if search_keyword.strip():
     
     target_fields = ['부서명', '세부사업명', '정책사업명', '단위사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '분야명', '부문명']
     
-    # 1단계: 원문 또는 띄어쓰기 제거(Space-Insensitive) 조건
     final_mask = pd.Series(False, index=search_df.index)
-    
     for col in target_fields:
-        # A) 원문 포함 검색
         mask_a = search_df[col].str.contains(kw_raw, case=False, na=False)
-        # B) 띄어쓰기 무시 상호 검색 ('정보화 교육' ↔ '정보화교육' 100% 매칭)
         mask_b = search_df[col].astype(str).str.replace(" ", "", regex=False).str.contains(kw_nospace, case=False, na=False)
-        
         col_mask = mask_a | mask_b
         
-        # C) 단어 조합 교집합 검색 (단어가 2개 이상일 때 '정보화'와 '교육'이 모두 들어있는 항목 탐색)
         if len(tokens) > 1:
             token_mask = pd.Series(True, index=search_df.index)
             for t in tokens:
@@ -315,8 +297,36 @@ if search_keyword.strip():
         
     search_df = search_df[final_mask]
 
-# 검색 결과 요약 메트릭 바
-total_budget_thousand = search_df['예산액_num'].sum()
+# ==========================================
+# 🌟 5. 경정/추경 중복 자동 정산 정밀 합계 엔진
+# ==========================================
+def calculate_accurate_budget_sum(target_df, is_all_budget_types=True):
+    """
+    본예산과 추경(경정)이 모두 포함된 '전체' 검색 시 동일 항목의 이중 합산(Double Counting)을 방지합니다.
+    항목키별로 최신 예산구분(가장 최근 추경/경정)의 예산액만 정산 합산합니다.
+    """
+    if target_df.empty:
+        return 0.0, target_df
+        
+    if not is_all_budget_types:
+        # 단일 예산구분(예: 본예산) 선택 시 해당 금액 그대로 정산
+        return float(target_df['예산액_num'].sum()), target_df
+        
+    temp = target_df.copy()
+    temp['sort_key'] = temp['예산구분'].apply(get_budget_type_sort_key)
+    
+    # 동일 항목 식별 기준 키
+    group_cols = ['부서명', '세부사업명', '통계목명', '산출근거명']
+    
+    # 항목별 최신 예산구분(추경/경정) 행 대표 추출
+    idx_latest = temp.groupby(group_cols)['sort_key'].idxmax()
+    latest_df = temp.loc[idx_latest]
+    
+    accurate_sum = float(latest_df['예산액_num'].sum())
+    return accurate_sum, latest_df
+
+is_all_types_selected = (sel_budget_type == "전체")
+total_budget_thousand, latest_dedup_df = calculate_accurate_budget_sum(search_df, is_all_budget_types=is_all_types_selected)
 total_budget_billion = total_budget_thousand / 100000.0
 
 col_m1, col_m2, col_m3 = st.columns(3)
@@ -324,15 +334,16 @@ col_m1, col_m2, col_m3 = st.columns(3)
 with col_m1:
     st.markdown(f"""
     <div class="metric-badge">
-        <div class="metric-label">검색된 예산 항목 수</div>
+        <div class="metric-label">검색된 예산 내역 (이력 포함)</div>
         <div class="metric-value">{len(search_df):,} 건</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_m2:
+    badge_sub_label = "(경정/추경 중복정산 반영)" if is_all_types_selected else f"({sel_budget_type} 기준)"
     st.markdown(f"""
     <div class="metric-badge">
-        <div class="metric-label">검색 예산 합계</div>
+        <div class="metric-label">실효 예산 정산 합계 <span style="font-size:11px; color:#2563eb;">{badge_sub_label}</span></div>
         <div class="metric-value">{total_budget_billion:,.2f} 억 원 <span style="font-size:13px; font-weight:500; color:#64748b;">({total_budget_thousand:,.0f} 천원)</span></div>
     </div>
     """, unsafe_allow_html=True)
@@ -352,7 +363,7 @@ display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '�
 
 col_t1, col_t2 = st.columns([4, 1])
 with col_t1:
-    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건)")
+    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건 - 본예산/추경 변경이력 전체 표출)")
 with col_t2:
     safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
     download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
@@ -394,21 +405,24 @@ st.dataframe(
 )
 
 # ==========================================
-# 5. 스마트 실시간 예산 분석 패널 (하단 불필요 카드 완전 제거 및 데이터 기반 집계 연동)
+# 6. 스마트 실시간 예산 정산 분석 패널 (경정/추경 중복 자동 정산 데이터 연동)
 # ==========================================
 if not search_df.empty:
     st.markdown("---")
-    st.markdown("### 📊 검색 예산 실시간 스마트 집계 패널")
+    st.markdown("### 📊 검색 예산 실시간 정산 분석 패널")
     
     tab_dept, tab_stat, tab_type = st.tabs([
-        "🏢 부서별 예산 집계 Top 10",
+        "🏢 부서별 예산 정산 집계 Top 10",
         "🏷️ 주요 통계목별 예산 비중",
         "⚖️ 의무/재량 지출 구조"
     ])
     
-    # [탭 1] 부서별 예산 집계 Top 10
+    # 경정 중복제거 정산 데이터셋 사용
+    analysis_base_df = latest_dedup_df if is_all_types_selected else search_df
+    
+    # [탭 1] 부서별 예산 정산 집계 Top 10
     with tab_dept:
-        dept_group = search_df.groupby('부서명').agg(
+        dept_group = analysis_base_df.groupby('부서명').agg(
             예산합계_천원=('예산액_num', 'sum'),
             항목수=('예산액_num', 'count')
         ).reset_index()
@@ -417,12 +431,12 @@ if not search_df.empty:
         
         col_d1, col_d2 = st.columns([1, 1])
         with col_d1:
-            st.markdown("##### 🏢 부서별 예산 규모 순위 (상위 10개 부서)")
+            st.markdown("##### 🏢 부서별 정산 예산 규모 순위 (상위 10개 부서)")
             chart_df = dept_group.head(10).set_index('부서명')[['예산합계_억원']]
             st.bar_chart(chart_df)
             
         with col_d2:
-            st.markdown("##### 📋 부서별 예산 집계 요약표")
+            st.markdown("##### 📋 부서별 정산 예산 요약표")
             dept_display = dept_group.head(10).copy()
             dept_display.columns = ['부서명', '예산합계(천원)', '건수', '예산합계(억원)']
             st.dataframe(
@@ -437,7 +451,7 @@ if not search_df.empty:
 
     # [탭 2] 주요 통계목별 예산 비중
     with tab_stat:
-        stat_group = search_df.groupby('통계목명').agg(
+        stat_group = analysis_base_df.groupby('통계목명').agg(
             예산합계_천원=('예산액_num', 'sum'),
             항목수=('예산액_num', 'count')
         ).reset_index()
@@ -446,12 +460,12 @@ if not search_df.empty:
         
         col_s1, col_s2 = st.columns([1, 1])
         with col_s1:
-            st.markdown("##### 🏷️ 통계목별 예산 규모 순위 (상위 10개 비목)")
+            st.markdown("##### 🏷️ 통계목별 정산 예산 규모 순위 (상위 10개 비목)")
             stat_chart_df = stat_group.head(10).set_index('통계목명')[['예산합계_억원']]
             st.bar_chart(stat_chart_df)
             
         with col_s2:
-            st.markdown("##### 📋 통계목별 예산 집계 요약표")
+            st.markdown("##### 📋 통계목별 정산 예산 요약표")
             stat_display = stat_group.head(10).copy()
             stat_display.columns = ['통계목명', '예산합계(천원)', '건수', '예산합계(억원)']
             st.dataframe(
@@ -466,7 +480,7 @@ if not search_df.empty:
 
     # [탭 3] 의무/재량 지출 구조
     with tab_type:
-        type_group = search_df.groupby('의무/재량구분').agg(
+        type_group = analysis_base_df.groupby('의무/재량구분').agg(
             예산합계_천원=('예산액_num', 'sum'),
             항목수=('예산액_num', 'count')
         ).reset_index()
@@ -474,12 +488,12 @@ if not search_df.empty:
         
         col_t1, col_t2 = st.columns([1, 1])
         with col_t1:
-            st.markdown("##### ⚖️ 의무 vs 재량 지출 예산 비중 (억원)")
+            st.markdown("##### ⚖️ 의무 vs 재량 정산 예산 비중 (억원)")
             type_chart_df = type_group.set_index('의무/재량구분')[['예산합계_억원']]
             st.bar_chart(type_chart_df)
             
         with col_t2:
-            st.markdown("##### 📋 지출 구조 요약표")
+            st.markdown("##### 📋 지출 구조 정산 요약표")
             type_group.columns = ['지출구분', '예산합계(천원)', '건수', '예산합계(억원)']
             st.dataframe(
                 type_group[['지출구분', '예산합계(억원)', '예산합계(천원)', '건수']],
