@@ -152,21 +152,44 @@ def get_symbol_level(name):
     return 4
 
 def get_budget_type_sort_key(t_str):
+    """
+    본예산 ➔ 추경1회 ➔ 추경2회 ➔ 추경3회 성립전1차 ➔ 추경3회 성립전2차 ➔ 추경3회 성립전3차 ➔ 간주1차 ➔ 이월예산
+    예산확정 날짜 및 성립전 차수까지 완벽 대응 정렬 키
+    """
     s = str(t_str).strip()
     if '본예산' in s or '당초' in s or s == '본':
-        return (1, 0, s)
-    m = re.search(r'(\d+)', s)
-    if '추경' in s or '추가경정' in s:
-        if m:
-            num = int(m.group(1))
-            return (2, num, s)
-        elif '정리' in s or '최종' in s:
-            return (2, 99, s)
-        else:
-            return (2, 50, s)
+        return (1, 0, 0, s)
+        
+    chugyeong_num = 0
+    m_chu = re.search(r'추경(\d+)회', s)
+    if m_chu:
+        chugyeong_num = int(m_chu.group(1))
+    elif '추경' in s:
+        chugyeong_num = 50
+        
+    seonglip_num = 0
+    m_seong = re.search(r'성립전(\d+)차', s)
+    if m_seong:
+        seonglip_num = int(m_seong.group(1))
+        
+    ganju_num = 0
+    m_gan = re.search(r'간주(\d+)차', s)
+    if m_gan:
+        ganju_num = int(m_gan.group(1))
+        
+    if '이체' in s:
+        return (2, 0, 0, s)
+        
+    if chugyeong_num > 0:
+        return (2, chugyeong_num, seonglip_num, s)
+        
+    if ganju_num > 0:
+        return (2, 90, ganju_num, s)
+        
     if '이월' in s:
-        return (3, 0, s)
-    return (4, 0, s)
+        return (3, 0, 0, s)
+        
+    return (4, 0, 0, s)
 
 def normalize_item_name(name):
     s = re.sub(r'^[○Ο●◎◆■□οo\-▪ㆍ･\s]+', '', str(name).strip())
@@ -179,7 +202,7 @@ def load_and_prepare_year_data(year):
     """
     0단계: 상위 대항목 헤더 바인딩
     1단계: Multi-level 3계층(대항목/중항목/소항목) 소계 헤더 자동 차감 엔진
-    2단계: 상위 부모 헤더 스코프 지정 정규화 경정 대체 정산
+    2단계: 성립전 1차/2차/3차 정밀 정렬을 반영한 경정 대체 정산
     """
     df = data_manager.load_year_data(year)
     if df.empty:
