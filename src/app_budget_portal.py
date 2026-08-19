@@ -200,7 +200,7 @@ def normalize_item_name(name):
     s_clean = s.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 @st.cache_data(show_spinner=False)
-def load_and_prepare_year_data(year, cache_version="v2.6"):
+def load_and_prepare_year_data(year, cache_version="v2.7"):
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
@@ -276,6 +276,12 @@ def load_and_prepare_year_data(year, cache_version="v2.6"):
     non_circle_df['sort_key'] = non_circle_df['예산구분'].apply(get_budget_type_sort_key)
 
     superseded_indices = set()
+    for (dept, biz, tong, norm_val), group in non_circle_df.groupby(['부서명', '세부사업명', '통계목명', 'norm_name'], sort=False):
+        if len(group['sort_key'].unique()) > 1:
+            max_sort = group['sort_key'].max()
+            replaced = group[group['sort_key'] < max_sort]
+            superseded_indices.update(replaced.index)
+
     for (dept, biz, tong), group in non_circle_df.groupby(['부서명', '세부사업명', '통계목명'], sort=False):
         u_types = group['sort_key'].unique()
         if len(u_types) > 1:
@@ -283,22 +289,22 @@ def load_and_prepare_year_data(year, cache_version="v2.6"):
             chu_items = group[group['sort_key'] == u_max_type]
             prev_items = group[group['sort_key'] < u_max_type]
 
-            has_gyeongjeong = False
             for c_idx, c_row in chu_items.iterrows():
+                c_norm = c_row['norm_name']
                 f = str(c_row['산출근거식']).strip()
                 name = str(c_row['산출근거명']).strip()
-                if '경정' in f or '성립전' in f or '성립전' in name or '간주' in f or '간주' in name:
-                    has_gyeongjeong = True
-                    break
 
-            if has_gyeongjeong:
-                superseded_indices.update(prev_items.index)
-            else:
-                for norm_val, n_group in group.groupby('norm_name'):
-                    if len(n_group['sort_key'].unique()) > 1:
-                        max_sort = n_group['sort_key'].max()
-                        replaced = n_group[n_group['sort_key'] < max_sort]
-                        superseded_indices.update(replaced.index)
+                exact_m = prev_items[prev_items['norm_name'] == c_norm]
+                if not exact_m.empty:
+                    superseded_indices.update(exact_m.index)
+                elif '경정' in f or '성립전' in f or '성립전' in name or '간주' in f or '간주' in name:
+                    if len(chu_items) == 1 and len(prev_items) == 1:
+                        superseded_indices.update(prev_items.index)
+                    else:
+                        for p_idx, p_row in prev_items.iterrows():
+                            p_norm = p_row['norm_name']
+                            if ('출전' in c_norm and '출전' in p_norm) or ('워크숍' in c_norm and '워크숍' in p_norm) or ('시설' in c_norm and '시설' in p_norm):
+                                superseded_indices.add(p_idx)
 
     for idx in superseded_indices:
         df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
