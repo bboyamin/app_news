@@ -162,12 +162,8 @@ def normalize_item_name(name):
     s_clean = s_no_paren.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 
-@st.cache_data(show_spinner="⚡ 13,000건 예산서 정질 정산 데이터 캐싱 중...")
+@st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
-    """
-    1단계: 추경/경정 대체 제외를 먼저 판단하여 이전 구버전 항목(상위 헤더 및 하위 세부항목 전체)을 '🔄 경정 대체 제외' 처리합니다.
-    2단계: 최신 활성 행 내에서 큰 동그라미 소계 중복을 감지하여 '🔻 소계 중복 제외' 처리합니다.
-    """
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
@@ -177,8 +173,7 @@ def load_and_prepare_year_data(year):
     df_copy['norm_name'] = df_copy['산출근거명'].apply(normalize_item_name)
     df_copy['sort_key'] = df_copy['예산구분'].apply(get_budget_type_sort_key)
 
-    # 🌟 1단계: 추경/경정 대체 제외를 최우선 판별!
-    # 동일 부서+세부사업+통계목+norm_name 그룹에서 최신 sort_key가 아닌 구버전 행 전부 '🔄 경정 대체 제외'
+    # 1단계: 추경/경정 대체 판단
     group_cols = ['부서명', '세부사업명', '통계목명', 'norm_name']
     idx_latest = df_copy.groupby(group_cols)['sort_key'].idxmax()
     latest_set = set(idx_latest.values)
@@ -187,7 +182,7 @@ def load_and_prepare_year_data(year):
         if idx not in latest_set:
             df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
 
-    # 🌟 2단계: 최신 활성 행(✅ 정산 포함) 내에서 동그라미 소계 중복 감지!
+    # 2단계: 최신 활성 행 내 소계 중복 판단
     active_mask = df_copy['정산 상태'] == '✅ 정산 포함'
     active_df = df_copy[active_mask].copy()
 
@@ -247,7 +242,7 @@ selected_year = st.sidebar.selectbox(
     index=0
 )
 
-# 데이터 로드 (0.001초 RAM 초고속 캐싱 적용)
+# 데이터 로드 (0.001초 RAM 캐싱 적용)
 df_year = load_and_prepare_year_data(selected_year)
 
 # 사이드바: 최신 예산서 CSV 직접 업로드 모듈
@@ -323,7 +318,7 @@ with col_f2:
 with col_f3:
     sel_budget_type = st.selectbox("📑 예산구분 선택", all_budget_types, index=0)
 
-# 필터 적용 (Pandas 고속 뷰)
+# 필터 적용
 filtered_df = df_year.copy()
 if sel_acct != "전체":
     filtered_df = filtered_df[filtered_df['회계명'] == sel_acct]
@@ -377,7 +372,7 @@ if search_keyword.strip():
     search_df = search_df[final_mask]
 
 # ==========================================
-# ⚡ 6. 실효 예산 정산 합계 계산
+# ⚡ 6. 예산 합계 계산 및 요약 바
 # ==========================================
 is_all_types_selected = (sel_budget_type == "전체")
 
@@ -389,24 +384,20 @@ else:
 total_budget_thousand = float(included_df['예산액_num'].sum())
 total_budget_billion = total_budget_thousand / 100000.0
 
-subtotal_ex_cnt = (search_df['정산 상태'] == '🔻 소계 중복 제외').sum()
-gyeongjeong_ex_cnt = (search_df['정산 상태'] == '🔄 경정 대체 제외').sum()
-
 col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     st.markdown(f"""
     <div class="metric-badge">
-        <div class="metric-label">검색된 예산 내역 (이력 포함)</div>
+        <div class="metric-label">검색된 예산 항목 수</div>
         <div class="metric-value">{len(search_df):,} 건</div>
     </div>
     """, unsafe_allow_html=True)
 
 with col_m2:
-    badge_sub_label = f"(소계 제외 {subtotal_ex_cnt}건, 경정 대체 {gyeongjeong_ex_cnt}건 정산)" if is_all_types_selected else f"(소계 제외 {subtotal_ex_cnt}건 정산)"
     st.markdown(f"""
     <div class="metric-badge">
-        <div class="metric-label">실효 예산 정산 합계 <span style="font-size:11px; color:#2563eb;">{badge_sub_label}</span></div>
+        <div class="metric-label">검색 예산 합계</div>
         <div class="metric-value">{total_budget_billion:,.2f} 억 원 <span style="font-size:13px; font-weight:500; color:#64748b;">({total_budget_thousand:,.0f} 천원)</span></div>
     </div>
     """, unsafe_allow_html=True)
@@ -422,9 +413,9 @@ with col_m3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 7. 테이블 검색 결과 & 대화형 정산 상태 필터
+# 7. 검색 결과 테이블 표출 (단정한 프로덕션 기본 컬럼)
 # ==========================================
-display_cols = ['정산 상태', '예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액_num', '의무/재량구분']
+display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액_num', '의무/재량구분']
 
 col_t1, col_t2 = st.columns([3, 1])
 with col_t1:
@@ -447,43 +438,18 @@ with col_t2:
         key="btn_download_csv"
     )
 
-# 🔍 정산 상태별 즉시 필터 제어 박스
-st.markdown("""
-<div style="font-size: 13.5px; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;">
-    💡 전체 목록 중 중복 정산 상태별 내역 선택 보기:
-</div>
-""", unsafe_allow_html=True)
-
-status_filter = st.radio(
-    "정산 상태 필터",
-    ["전체 내역 보기 (100% 표출)", f"✅ 정산 포함 항목만 ({len(search_df)-subtotal_ex_cnt-gyeongjeong_ex_cnt:,}건)", f"🔻 소계 중복 제외 항목만 ({subtotal_ex_cnt:,}건)", f"🔄 경정 대체 제외 항목만 ({gyeongjeong_ex_cnt:,}건)"],
-    index=0,
-    horizontal=True,
-    label_visibility="collapsed"
-)
-
-# 필터링 적용
-filtered_table_df = search_df.copy()
-if "✅ 정산 포함" in status_filter:
-    filtered_table_df = filtered_table_df[filtered_table_df['정산 상태'] == '✅ 정산 포함']
-elif "🔻 소계 중복 제외" in status_filter:
-    filtered_table_df = filtered_table_df[filtered_table_df['정산 상태'] == '🔻 소계 중복 제외']
-elif "🔄 경정 대체 제외" in status_filter:
-    filtered_table_df = filtered_table_df[filtered_table_df['정산 상태'] == '🔄 경정 대체 제외']
-
-total_cnt = len(filtered_table_df)
-show_table_df = filtered_table_df[display_cols].head(200).copy()
+total_cnt = len(search_df)
+show_table_df = search_df[display_cols].head(200).copy()
 show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
 
 if total_cnt > 200:
-    st.caption(f"💡 조건에 부합하는 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
+    st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
 
 st.dataframe(
     show_table_df,
     use_container_width=True,
     height=450,
     column_config={
-        "정산 상태": st.column_config.TextColumn("정산 상태 (중복 여부)", width="medium"),
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
             format="%,d",
@@ -494,7 +460,7 @@ st.dataframe(
 )
 
 # ==========================================
-# 8. 스마트 실시간 예산 정산 분석 패널 (소계 및 경정 중복 정제 데이터 연동)
+# 8. 스마트 실시간 예산 분석 패널
 # ==========================================
 if not search_df.empty:
     st.markdown("---")
