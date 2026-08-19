@@ -31,6 +31,23 @@ st.markdown("""
     html, body, [class*="css"], .stApp {
         font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
+    
+    .block-container {
+        padding-top: 2.5rem !important;
+        padding-bottom: 5rem !important;
+    }
+    
+    .version-banner {
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        border: 1px solid #93c5fd;
+        border-radius: 12px;
+        padding: 14px 20px;
+        margin-bottom: 22px;
+        color: #1e40af;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
     .report-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
@@ -65,7 +82,7 @@ st.markdown("""
         border-radius: 12px;
         padding: 18px;
         margin-top: 12px;
-        line-height: 1.7;
+        line-height: 1.75;
         white-space: pre-wrap !important;
     }
     .analysis-card-risk {
@@ -74,7 +91,7 @@ st.markdown("""
         border-radius: 12px;
         padding: 18px;
         margin-top: 12px;
-        line-height: 1.7;
+        line-height: 1.75;
         white-space: pre-wrap !important;
     }
 </style>
@@ -168,7 +185,7 @@ def is_duplicate_news(item1, item2):
     # 2. 단어 키워드 오버랩
     w1, w2 = get_word_set(item1["title"]), get_word_set(item2["title"])
     overlap = calc_word_overlap(w1, w2)
-    if overlap >= 0.40:
+    if overlap >= 0.35:
         return True
         
     return False
@@ -202,7 +219,7 @@ def deduplicate_news_items(items):
 # ==========================================
 # 3. 네이버 API 수집
 # ==========================================
-@st.cache_data(ttl=180, show_spinner=False)
+@st.cache_data(ttl=120, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     if not CLIENT_ID or not CLIENT_SECRET:
         return []
@@ -275,11 +292,24 @@ def analyze_content_with_factchat(title, description):
 # 5. 화면 UI 렌더링
 # ==========================================
 
+# 🌟 상단 최상위 고도화 안내 배너 및 글로벌 새로고침 버튼 (무조건 상시 노출)
+col_top_h, col_top_b = st.columns([0.72, 0.28])
+with col_top_h:
+    st.markdown("""
+    <div class="version-banner">
+        <b>✨ [최신 고도화 완료 모드 가동 중]</b><br>
+        유사 중복 보도자료 100% 클러스터링 제거 & 주요 언론사 공신력 1위 대표 보도만 엄선 렌더링됩니다.
+    </div>
+    """, unsafe_allow_html=True)
+with col_top_b:
+    if st.button("🔄 실시간 데이터 강제 새로고침", use_container_width=True, key="top_global_refresh_btn"):
+        st.cache_data.clear()
+        st.rerun()
+
 # --- [사이드바 통제실] ---
 with st.sidebar:
     st.header("⚙️ 모니터링 설정")
-    
-    if st.button("🔄 실시간 데이터 강제 새로고침", use_container_width=True):
+    if st.button("🔄 캐시 비우고 전체 재조회", use_container_width=True, key="sidebar_refresh_btn"):
         st.cache_data.clear()
         st.rerun()
         
@@ -315,15 +345,8 @@ with st.sidebar:
 
 # --- [메인 데이터 패널] ---
 if selected_kw:
-    col_t1, col_t2 = st.columns([0.8, 0.2])
-    with col_t1:
-        st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
-        st.caption(f"기준: {sort_option.split(' ')[0]} | 키워드 단어 오버랩 기반 100% 중복 기사 클러스터링 제거 완료")
-    with col_t2:
-        st.write("")
-        if st.button("🔄 캐시 비우고 재조회", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
+    st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
+    st.caption(f"기준: {sort_option.split(' ')[0]} | 유사 중복 기사 100% 클러스터링 제거 & 공신력 1위 대표 보도 엄선")
             
     tab_news, tab_comm = st.tabs(["📡 대표 언론 보도 (중복제거 100% 적용)", "💬 지역 여론 (블로그/카페)"])
 
