@@ -298,27 +298,66 @@ if search_keyword.strip():
     search_df = search_df[final_mask]
 
 # ==========================================
-# 🌟 5. 경정/추경 중복 자동 정산 정밀 합계 엔진
+# 🌟 5. 다층(2-Layer) 예산 중복 정밀 정산 엔진
+# Layer 1: 큰 동그라미(소계 헤더) vs 작은 동그라미(세부내역) 합산 중복 제거
+# Layer 2: 본예산 vs 추경(경정) 최신 버전 통합 정산
 # ==========================================
+def is_big_circle(name):
+    s = str(name).strip()
+    return bool(re.match(r'^[○Ο●◎◆■□]', s))
+
+def is_small_circle(name):
+    s = str(name).strip()
+    return bool(re.match(r'^[οo\-▪ㆍ･-]', s))
+
+def deduplicate_circle_hierarchy(target_df):
+    """
+    큰 동그라미(소계 항목) 뒤에 연속되는 작은 동그라미들(세부 내역)의 예산 합이 큰 동그라미 예산액과 동일할 경우,
+    소계 헤더(큰 동그라미)의 예산액 중복 합산을 정밀 제외합니다.
+    """
+    if target_df.empty:
+        return target_df
+    
+    records = target_df.to_dict('records')
+    excluded = set()
+    
+    i = 0
+    n = len(records)
+    while i < n:
+        c_name = records[i]['산출근거명']
+        if is_big_circle(c_name):
+            big_budget = records[i]['예산액_num']
+            small_sum = 0
+            small_idx = []
+            j = i + 1
+            while j < n and is_small_circle(records[j]['산출근거명']):
+                small_sum += records[j]['예산액_num']
+                small_idx.append(j)
+                j += 1
+            if small_idx and (abs(small_sum - big_budget) < 1.0 or big_budget == small_sum):
+                excluded.add(i)
+                i = j
+                continue
+        i += 1
+        
+    valid = [records[k] for k in range(n) if k not in excluded]
+    return pd.DataFrame(valid)
+
 def calculate_accurate_budget_sum(target_df, is_all_budget_types=True):
-    """
-    본예산과 추경(경정)이 모두 포함된 '전체' 검색 시 동일 항목의 이중 합산(Double Counting)을 방지합니다.
-    항목키별로 최신 예산구분(가장 최근 추경/경정)의 예산액만 정산 합산합니다.
-    """
     if target_df.empty:
         return 0.0, target_df
         
+    # 1단계: 동그라미 계층 구조 소계 중복 제거
+    cleaned_df = deduplicate_circle_hierarchy(target_df)
+    
     if not is_all_budget_types:
-        # 단일 예산구분(예: 본예산) 선택 시 해당 금액 그대로 정산
-        return float(target_df['예산액_num'].sum()), target_df
+        return float(cleaned_df['예산액_num'].sum()), cleaned_df
         
-    temp = target_df.copy()
+    # 2단계: '전체' 예산구분 시 추경/경정 최신 버전 통합
+    temp = cleaned_df.copy()
     temp['sort_key'] = temp['예산구분'].apply(get_budget_type_sort_key)
     
-    # 동일 항목 식별 기준 키
     group_cols = ['부서명', '세부사업명', '통계목명', '산출근거명']
-    
-    # 항목별 최신 예산구분(추경/경정) 행 대표 추출
     idx_latest = temp.groupby(group_cols)['sort_key'].idxmax()
     latest_df = temp.loc[idx_latest]
     
@@ -340,7 +379,7 @@ with col_m1:
     """, unsafe_allow_html=True)
 
 with col_m2:
-    badge_sub_label = "(경정/추경 중복정산 반영)" if is_all_types_selected else f"({sel_budget_type} 기준)"
+    badge_sub_label = "(소계 및 경정 중복정산 반영)" if is_all_types_selected else f"({sel_budget_type} 소계중복 정산)"
     st.markdown(f"""
     <div class="metric-badge">
         <div class="metric-label">실효 예산 정산 합계 <span style="font-size:11px; color:#2563eb;">{badge_sub_label}</span></div>
@@ -363,7 +402,7 @@ display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '�
 
 col_t1, col_t2 = st.columns([4, 1])
 with col_t1:
-    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건 - 본예산/추경 변경이력 전체 표출)")
+    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건 - 본예산/추경 및 세부 산출내역 전체 표출)")
 with col_t2:
     safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
     download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
@@ -405,7 +444,7 @@ st.dataframe(
 )
 
 # ==========================================
-# 6. 스마트 실시간 예산 정산 분석 패널 (경정/추경 중복 자동 정산 데이터 연동)
+# 6. 스마트 실시간 예산 정산 분석 패널 (소계 및 경정 중복 정제 데이터 연동)
 # ==========================================
 if not search_df.empty:
     st.markdown("---")
@@ -417,8 +456,8 @@ if not search_df.empty:
         "⚖️ 의무/재량 지출 구조"
     ])
     
-    # 경정 중복제거 정산 데이터셋 사용
-    analysis_base_df = latest_dedup_df if is_all_types_selected else search_df
+    # 계층 및 경정 2중 정제 데이터셋 사용
+    analysis_base_df = latest_dedup_df
     
     # [탭 1] 부서별 예산 정산 집계 Top 10
     with tab_dept:
