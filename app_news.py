@@ -300,7 +300,7 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 인스타그램 & 🧵 쓰레드 개별 포스트 수집 엔진
+# 📸 3-2. 인스타그램 & 🧵 쓰레드 개별 포스트 수집 엔진 (깔끔한 텍스트 전용)
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_pure_sns_posts(platform_name, query, count=6):
     items = []
@@ -320,13 +320,15 @@ def fetch_pure_sns_posts(platform_name, query, count=6):
                 d = item.pubDate.text[:16] if item.pubDate else ''
                 
                 clean_t = re.sub(r' - .*?$', '', t)
-                items.append({
-                    "title": f"[{platform_name}] {clean_t}",
-                    "description": f"{platform_name}에서 키워드 '{query}' 관련하여 공유된 시정 동향 소셜 피드입니다.",
-                    "link": l,
-                    "date": d,
-                    "source_type": platform_key
-                })
+                clean_t = re.sub(r'\[.*?\]|\(.*?\)', '', clean_t).strip()
+                if clean_t:
+                    items.append({
+                        "title": clean_t,
+                        "description": f"{platform_name} 채널의 '{query}' 관련 게시글입니다.",
+                        "link": l,
+                        "date": d,
+                        "source_type": platform_key
+                    })
     except Exception:
         pass
         
@@ -334,18 +336,18 @@ def fetch_pure_sns_posts(platform_name, query, count=6):
         clean_tag = query.replace(" ", "")
         if platform_key == "instagram":
             items.append({
-                "title": f"📸 #{clean_tag} 인스타그램 모니터링 피드",
-                "description": f"인스타그램에서 #{clean_tag}, #용인특례시, #처인구 해시태그 게시글 피드입니다.",
+                "title": f"#{clean_tag} 최신 게시글",
+                "description": f"인스타그램 #{clean_tag} 해시태그 게시물입니다.",
                 "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_tag)}/",
-                "date": "실시간 피드",
+                "date": "실시간",
                 "source_type": "instagram"
             })
         else:
             items.append({
-                "title": f"🧵 용인시 '{query}' 쓰레드(Threads) 시민 여론 피드",
-                "description": f"쓰레드(Threads)에서 '{query}' 관련 시민 여론 포스트입니다.",
+                "title": f"'{query}' 최신 게시글",
+                "description": f"쓰레드(Threads) '{query}' 관련 게시물입니다.",
                 "link": f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}",
-                "date": "실시간 피드",
+                "date": "실시간",
                 "source_type": "threads"
             })
             
