@@ -22,13 +22,13 @@ st.set_page_config(
 # 데이터 디렉토리 및 2026 기본 데이터 확인
 data_manager.ensure_data_dir()
 
-# 깔끔하고 직관적인 오피스 테마 CSS
+# 시선집중 UX/UI 프리미엄 오피스 테마 CSS
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;800&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Noto Sans KR', sans-serif;
+        font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
     
     .stApp {
@@ -38,16 +38,16 @@ st.markdown("""
     /* 상단 미니멀 헤더 */
     .search-header {
         background: linear-gradient(90deg, #1e3a8a 0%, #0f766e 100%);
-        padding: 20px 28px;
-        border-radius: 12px;
+        padding: 22px 28px;
+        border-radius: 14px;
         color: #ffffff;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(30, 58, 138, 0.15);
+        margin-bottom: 22px;
+        box-shadow: 0 6px 16px rgba(30, 58, 138, 0.15);
     }
     
     .search-title {
         font-size: 24px;
-        font-weight: 700;
+        font-weight: 800;
         margin: 0 0 6px 0;
         display: flex;
         align-items: center;
@@ -55,8 +55,8 @@ st.markdown("""
     }
     
     .search-subtitle {
-        font-size: 13px;
-        opacity: 0.9;
+        font-size: 13.5px;
+        opacity: 0.92;
         margin: 0;
     }
 
@@ -64,93 +64,101 @@ st.markdown("""
     .metric-badge {
         background: #ffffff;
         border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        padding: 12px 16px;
+        border-radius: 10px;
+        padding: 14px 18px;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
     }
     .metric-label {
-        font-size: 12px;
+        font-size: 12.5px;
         color: #64748b;
-        font-weight: 500;
+        font-weight: 600;
     }
     .metric-value {
-        font-size: 20px;
-        font-weight: 700;
+        font-size: 21px;
+        font-weight: 800;
         color: #1e3a8a;
     }
 
-    /* 검색 키워드 모던 대형 콘솔 박스 */
+    /* 🌟 검색 키워드 시선 집중 모던 대형 콘솔 박스 */
     .search-console-card {
-        background: #ffffff;
-        border: 2px solid #3b82f6;
-        border-radius: 14px;
-        padding: 18px 22px 14px 22px;
-        margin-top: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 8px 20px rgba(59, 130, 246, 0.12);
+        background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+        border: 2px solid #2563eb;
+        border-radius: 16px;
+        padding: 20px 24px 16px 24px;
+        margin-top: 10px;
+        margin-bottom: 14px;
+        box-shadow: 0 10px 25px rgba(37, 99, 235, 0.15);
     }
     
     .search-console-title {
-        font-size: 18px;
-        font-weight: 700;
+        font-size: 19px;
+        font-weight: 800;
         color: #1e3a8a;
         margin-bottom: 6px;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 10px;
     }
 
-    /* 대형 애플/구글 스타일 텍스트 입력 박스 자체 디자인 */
+    /* 🌟 시선 강탈 대형 프리미엄 텍스트 입력 박스 커스텀 CSS */
     div[data-testid="stTextInput"] {
-        margin-top: 6px;
-        margin-bottom: 10px;
+        margin-top: 4px;
+        margin-bottom: 8px;
+    }
+
+    div[data-testid="stTextInput"] label {
+        font-size: 16px !important;
+        font-weight: 800 !important;
+        color: #1e3a8a !important;
+        margin-bottom: 8px !important;
     }
 
     div[data-baseweb="input"] {
         border-radius: 14px !important;
-        border: 2px solid #cbd5e1 !important;
+        border: 3px solid #2563eb !important;
         background-color: #ffffff !important;
-        padding: 6px 12px !important;
-        height: 54px !important;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05) !important;
+        padding: 6px 14px !important;
+        height: 58px !important;
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12) !important;
         transition: all 0.25s ease-in-out !important;
     }
     
     div[data-baseweb="input"]:hover {
-        border-color: #3b82f6 !important;
-        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.15) !important;
+        border-color: #1d4ed8 !important;
+        box-shadow: 0 8px 22px rgba(29, 78, 216, 0.2) !important;
     }
     
     div[data-baseweb="input"]:focus-within {
-        border-color: #2563eb !important;
+        border-color: #1d4ed8 !important;
         background-color: #ffffff !important;
-        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2), 0 8px 20px rgba(37, 99, 235, 0.15) !important;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25), 0 10px 28px rgba(37, 99, 235, 0.22) !important;
     }
     
     div[data-baseweb="input"] input {
-        font-size: 17px !important;
-        font-weight: 600 !important;
+        font-size: 18px !important;
+        font-weight: 700 !important;
         color: #0f172a !important;
-        padding-left: 8px !important;
+        padding-left: 10px !important;
     }
 
     div[data-baseweb="input"] input::placeholder {
-        color: #94a3b8 !important;
-        font-size: 15px !important;
-        font-weight: 400 !important;
+        color: #64748b !important;
+        font-size: 15.5px !important;
+        font-weight: 500 !important;
     }
 
     /* 산출근거 수식 카드 */
     .detail-box {
         background: #ffffff;
-        border-left: 4px solid #0d9488;
-        padding: 16px;
-        border-radius: 8px;
-        margin-top: 12px;
+        border-left: 5px solid #0d9488;
+        padding: 18px;
+        border-radius: 10px;
+        margin-top: 14px;
         border-top: 1px solid #e2e8f0;
         border-right: 1px solid #e2e8f0;
         border-bottom: 1px solid #e2e8f0;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
     }
     
     .formula-tag {
@@ -161,7 +169,7 @@ st.markdown("""
         border-radius: 6px;
         font-family: monospace;
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 700;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -187,7 +195,7 @@ df_year = data_manager.load_year_data(selected_year)
 # 사이드바: 최신 예산서 CSV 직접 업로드 모듈
 st.sidebar.markdown("---")
 with st.sidebar.expander("📤 [관리자] 새 예산서 CSV 업로드", expanded=False):
-    st.caption("예산편성 후 최종 합본예산서 CSV 파일을 업로드하시면 0.5초 만에 연도별로 자동 정제·적용됩니다.")
+    st.caption("예산편성 후 최종 합본예산서 CSV 파일을 업로드하시면 연도별로 자동 정제·적용됩니다.")
     upload_year = st.number_input("등록할 연도", min_value=2020, max_value=2035, value=selected_year+1, step=1)
     uploaded_file = st.file_uploader("합본예산서 CSV 파일 선택", type=["csv"])
     
@@ -220,19 +228,19 @@ with st.sidebar.expander("📤 [관리자] 새 예산서 CSV 업로드", expande
 st.markdown(f"""
 <div class="search-header">
     <div class="search-title">🔍 {selected_year}년 세출 예산서 스마트 통합 검색</div>
-    <div class="search-subtitle">부서명, 세부사업명, 통계목, 산출근거 수식을 입력하여 예산 내역과 단가 수식을 1초 만에 확인하세요.</div>
+    <div class="search-subtitle">부서명, 세부사업명, 통계목, 산출근거 수식을 입력하여 예산 내역과 단가 수식을 확인하세요.</div>
 </div>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 3. 드롭다운 필터 바 (회계구분 / 소관부서)
+# 3. 드롭다운 필터 바 (회계구분 / 소관부서 / 예산확정 순 정렬 예산구분)
 # ==========================================
 # 회계명 정제: '회계'로 끝나는 정제된 명칭을 예산 규모 내림차순으로 정렬
 valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
 acct_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
 all_accts = ["전체"] + acct_order
 
-# 소관 부서 정제: CSV 데이터 원본 167개 부서 100% 보존 (4차산업융합과 등 포함, 이상치 '0', '-', 'nan', 'N/A'만 제외)
+# 소관 부서 정제: CSV 데이터 원본 부서 100% 보존
 csv_dept_list = []
 for d in df_year['부서명'].dropna().unique():
     d_str = str(d).strip()
@@ -242,9 +250,31 @@ for d in df_year['부서명'].dropna().unique():
 
 all_depts = ["전체"] + csv_dept_list
 
-# 예산구분 정제: 본예산, 추경1회, 추경2회 등 목록 추출
+# 🌟 예산확정 날짜/순서 참고 정렬 알고리즘 (본예산 -> 추경1회 -> 추경2회 -> 추경3회... -> 이월예산)
 raw_type_list = [str(t).strip() for t in df_year['예산구분'].dropna().unique() if str(t).strip() not in ['-', 'nan', 'N/A', '']]
-all_budget_types = ["전체"] + raw_type_list
+
+def get_budget_type_sort_key(t_str):
+    s = str(t_str).strip()
+    if '본예산' in s or '당초' in s or s == '본':
+        return (1, 0, s)
+    
+    m = re.search(r'(\d+)', s)
+    if '추경' in s or '추가경정' in s:
+        if m:
+            num = int(m.group(1))
+            return (2, num, s)
+        elif '정리' in s or '최종' in s:
+            return (2, 99, s)
+        else:
+            return (2, 50, s)
+            
+    if '이월' in s:
+        return (3, 0, s)
+        
+    return (4, 0, s)
+
+sorted_budget_types = sorted(raw_type_list, key=get_budget_type_sort_key)
+all_budget_types = ["전체"] + sorted_budget_types
 
 col_f1, col_f2, col_f3 = st.columns(3)
 
@@ -255,7 +285,7 @@ with col_f2:
     sel_dept = st.selectbox("🏢 소관 부서 선택 (CSV 원본 부서 순서)", all_depts, index=0)
 
 with col_f3:
-    sel_budget_type = st.selectbox("📑 예산구분 선택 (본예산/추경1회...)", all_budget_types, index=0)
+    sel_budget_type = st.selectbox("📑 예산구분 선택 (확정 순서 정렬: 본예산 ➔ 추경1회...)", all_budget_types, index=0)
 
 # 필터 적용
 filtered_df = df_year.copy()
@@ -267,22 +297,25 @@ if sel_budget_type != "전체":
     filtered_df = filtered_df[filtered_df['예산구분'] == sel_budget_type]
 
 # ==========================================
-# 4. 실시간 통합 키워드 검색창 (시선집중 모던 콘솔)
+# 4. 실시간 통합 키워드 검색창 (시선집중 프리미엄 대형 콘솔)
 # ==========================================
 st.markdown("---")
 st.markdown("""
 <div class="search-console-card">
-    <div class="search-console-title">🔎 스마트 세출 예산 통합 키워드 검색</div>
-    <div style="font-size: 13.5px; color: #475569; margin-bottom: 8px;">
-        원하시는 단어를 입력하시면 <b>10개 모든 텍스트 영역에서 띄어쓰기 유무에 상관없이 0.1초 만에 스마트 탐색</b>됩니다.
+    <div class="search-console-title">
+        <span style="background: #2563eb; color: #ffffff; padding: 4px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 800;">LIVE SEARCH</span>
+        <span>🔎 스마트 세출 예산 통합 키워드 검색</span>
+    </div>
+    <div style="font-size: 14px; color: #334155; margin-top: 6px; font-weight: 500;">
+        💡 사업명, 소관 부서, 세부항목, 산출근거 수식 단어를 입력하시면 <b>10개 필드에서 0.1초 만에 실시간 탐색</b>됩니다.
     </div>
 </div>
 """, unsafe_allow_html=True)
 
 search_keyword = st.text_input(
-    "통합 검색어 입력", 
-    placeholder="👉 원하시는 검색어를 자유롭게 입력하세요 (예: 정보화 교육, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)",
-    label_visibility="collapsed"
+    "🔎 원하시는 통합 검색어를 입력하세요", 
+    placeholder="👉 자유롭게 검색어를 입력하세요 (예: 정보화 교육, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)",
+    label_visibility="visible"
 )
 
 search_df = filtered_df.copy()
@@ -315,7 +348,7 @@ if search_keyword.strip():
         
     search_df = search_df[final_mask]
 
-# 검색 결과 요약 메트릭 바 (예산 합계 카드 제거 및 2분할 배치)
+# 검색 결과 요약 메트릭 바
 col_m1, col_m2 = st.columns(2)
 
 with col_m1:
@@ -347,7 +380,7 @@ with col_t2:
     safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
     download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
     
-    # 엑셀 다운로드용 데이터 생성 (예산액 천원 콤마 포맷 적용)
+    # 엑셀 다운로드용 데이터 생성
     download_df = search_df[display_cols].copy()
     download_df['예산액(천원)'] = download_df['예산액_num'].apply(lambda x: f"{int(x):,}")
     download_df = download_df.drop(columns=['예산액_num'])
@@ -391,7 +424,6 @@ if not search_df.empty:
     st.markdown("---")
     st.markdown("### 📄 세부 산출근거 수식 확인 카드")
     
-    # 초고속 렌더링을 위해 상위 50개 항목을 사전 딕셔너리로 고속 추출
     sample_records = search_df[['부서명', '세부사업명', '산출근거명', '예산액_num', '정책사업명', '단위사업명', '회계명', '편성목명', '통계목명', '의무/재량구분', '산출근거식', '예산구분']].head(50).to_dict('records')
     
     selected_idx = st.selectbox(
