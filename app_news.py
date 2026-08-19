@@ -1,9 +1,11 @@
 import os
 import json
+import re
 import requests
 import urllib.parse
 import urllib3
 import streamlit as st
+from difflib import SequenceMatcher
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from dotenv import load_dotenv
@@ -24,19 +26,24 @@ KEYWORD_FILE = "keywords_db.json"
 # 전역 CSS 디자인 인젝션 (호버 효과 및 카드 디자인)
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap');
+    
+    html, body, [class*="css"], .stApp {
+        font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
     .report-card {
         background-color: #ffffff;
-        border: 1px solid #eaeaea;
-        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
         padding: 24px;
-        margin-bottom: 16px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        margin-bottom: 18px;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
         transition: all 0.2s ease-in-out;
     }
     .report-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 16px rgba(0,0,0,0.08);
-        border-color: #d0d7de;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.07);
+        border-color: #cbd5e1;
     }
     .tag-badge {
         font-size: 11px;
@@ -45,10 +52,31 @@ st.markdown("""
         border-radius: 6px;
         display: inline-block;
         margin-bottom: 12px;
+        margin-right: 6px;
     }
-    .tag-news { background-color: #e3f2fd; color: #1565c0; }
-    .tag-blog { background-color: #e8f5e9; color: #2e7d32; }
-    .tag-cafe { background-color: #fff3e0; color: #e65100; }
+    .tag-news { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .tag-blog { background-color: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .tag-cafe { background-color: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+    .tag-dedup { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    
+    .analysis-card-neutral {
+        background-color: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        padding: 18px;
+        margin-top: 12px;
+        line-height: 1.7;
+        white-space: pre-wrap !important;
+    }
+    .analysis-card-risk {
+        background-color: #fff5f5;
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+        padding: 18px;
+        margin-top: 12px;
+        line-height: 1.7;
+        white-space: pre-wrap !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -84,7 +112,72 @@ def save_keywords():
         json.dump(st.session_state.keywords, f, ensure_ascii=False)
 
 # ==========================================
-# 2. 네이버 API 데이터 수집 (정렬 로직 추가)
+# 2. 스마트 중복 제거 & 공신력 필터링 알고리즘
+# ==========================================
+MAJOR_MEDIA_LIST = [
+    "연합뉴스", "KBS", "SBS", "MBC", "YTN", "조선일보", "중앙일보", "동아일보", 
+    "매일경제", "한국경제", "전자신문", "경향신문", "한겨레", "경기일보", "중부일보", 
+    "인천일보", "기호일보", "경기신문", "뉴시스", "뉴스1"
+]
+
+def clean_html(text):
+    if not text:
+        return ""
+    text = text.replace('<b>', '').replace('</b>', '').replace('&quot;', '"').replace('&lt;', '<').replace('&gt;', '>')
+    return text.strip()
+
+def clean_title_for_sim(title):
+    cleaned = clean_html(title)
+    cleaned = re.sub(r'\[.*?\]|\(.*?\)', '', cleaned)
+    cleaned = re.sub(r'[^\w\s]', '', cleaned)
+    return cleaned.strip()
+
+def get_media_authority_score(item):
+    link = item.get("originallink", "") or item.get("link", "")
+    title = item.get("title", "")
+    score = 0
+    for media in MAJOR_MEDIA_LIST:
+        if media in title or media in link:
+            score += 15
+            break
+    if "news.naver.com" in link:
+        score += 10
+    return score
+
+def deduplicate_news_items(items, similarity_threshold=0.55):
+    if not items:
+        return []
+        
+    clusters = []
+    for item in items:
+        clean_t = clean_title_for_sim(item["title"])
+        if not clean_t:
+            continue
+            
+        matched_cluster = None
+        for cluster in clusters:
+            rep_clean_t = clean_title_for_sim(cluster["representative"]["title"])
+            sim_ratio = SequenceMatcher(None, clean_t, rep_clean_t).ratio()
+            if sim_ratio >= similarity_threshold:
+                matched_cluster = cluster
+                break
+                
+        if matched_cluster:
+            matched_cluster["duplicates_count"] += 1
+            matched_cluster["all_items"].append(item)
+            if get_media_authority_score(item) > get_media_authority_score(matched_cluster["representative"]):
+                matched_cluster["representative"] = item
+        else:
+            clusters.append({
+                "representative": item,
+                "duplicates_count": 1,
+                "all_items": [item]
+            })
+            
+    return clusters
+
+# ==========================================
+# 3. 네이버 API 수집
 # ==========================================
 @st.cache_data(ttl=300)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
@@ -96,7 +189,8 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     adjusted_query = f"용인 {query}" if target == "cafearticle" and "용인" not in query else query
     enc_text = urllib.parse.quote(adjusted_query)
     
-    request_url = f"{url}?query={enc_text}&display={display_cnt}&sort={sort_type}"
+    fetch_limit = min(display_cnt * 3, 100) if target == "news" else display_cnt
+    request_url = f"{url}?query={enc_text}&display={fetch_limit}&sort={sort_type}"
     
     try:
         res = requests.get(request_url, headers=headers, timeout=10)
@@ -107,25 +201,31 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     return []
 
 # ==========================================
-# 3. 사내 LLM 분석 모듈
+# 4. 고품격 AI 심층 브리핑 & 리스크 분석 모듈
 # ==========================================
 def analyze_content_with_factchat(title, description):
     if not FACTCHAT_API_KEY or not FACTCHAT_BASE_URL:
         return {"summary": "API 설정 누락", "is_negative": False, "point": ""}
         
-    system_prompt = """
-    당신은 20년 경력의 공공기관 AI, IT 기술/경제/부동산 전문 분석가이다.
-    복잡한 정보를 핵심만 추려 전달하며, 단순 홍보성 문구는 제외하고 데이터와 팩트 중심으로 요약한다.
+    system_prompt = """너는 20년 경력의 공공기관 수석 시정 모니터링 분석가이다.
+제시된 기사 및 민원/여론 게시글을 정밀 분석하여, 단체장 및 실무자가 15초 만에 핵심 현황과 대응 포인트를 파악할 수 있도록 '고품격 시정 종합 브리핑'을 작성하라.
+
+[분석 가이드라인 - 절대 준수]:
+1. **📌 [시정 핵심 브리핑]**: 딱딱한 1, 2, 3번 목록 대신, 사건의 주요 배경, 핵심 사실 및 구체적 수치/사업 규격이 자연스럽게 연결되는 2~3개 고급 단락(총 3~5문장)으로 풍부하게 작성하라.
+2. **⚠️ [민원/갈등/리스크 판단 및 요점]**:
+   - 시민의 부정적 민원, 갈등, 비판, 정책 불만, 시정 위험 요소가 있는 경우 `is_negative`를 `true`로 설정하고, **주요 불만 및 갈등 원인**을 자연스러운 2문장으로 구체적으로 명시하라.
+   - 긍정적이거나 일반 보도인 경우 `is_negative`를 `false`로 설정하라.
+3. 인사말이나 사족은 배제하고 아래 JSON 포맷으로 정확히 출력하라.
+
+[출력 포맷(JSON 규격)]:
+{
+  "summary": "📌 [시정 핵심 브리핑]\n자연스럽게 연결되는 1단락...\n\n자연스럽게 이어지는 2단락...",
+  "is_negative": true 또는 false,
+  "point": "⚠️ [시민 민원/갈등 요점]\n주요 불만 원인 및 대응 필요사항..."
+}
+"""
     
-    [분석 지침]
-    1. 내용을 정확히 '3줄 요약'하라. (말투는 전문적이고 간결한 '다'체 통일)
-    2. 내용 중 시민의 '부정, 불만, 민원, 비판, 갈등' 요소가 있다면 [위험도: 높음]으로 간주하고 구체적인 '불만 요점'을 2줄로 추출하라.
-    """
-    
-    user_prompt = f"""
-    제목: {title}\n내용: {description}
-    출력 포맷(JSON): {{"summary": "1줄 요약...\\n2줄 요약...\\n3줄 요약...", "is_negative": true 또는 false, "point": "핵심요점"}}
-    """
+    user_prompt = f"제목: {title}\n내용/요약: {description}"
     
     payload = {
         "model": "gpt-5.4",
@@ -133,12 +233,12 @@ def analyze_content_with_factchat(title, description):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        "temperature": 0.1
+        "temperature": 0.15
     }
     headers = {"Authorization": f"Bearer {FACTCHAT_API_KEY}", "Content-Type": "application/json"}
     
     try:
-        res = session.post(f"{FACTCHAT_BASE_URL}/chat/completions", headers=headers, json=payload, verify=False, timeout=20)
+        res = session.post(f"{FACTCHAT_BASE_URL}/chat/completions", headers=headers, json=payload, verify=False, timeout=25)
         res.raise_for_status()
         result_text = res.json()['choices'][0]['message']['content'].strip()
         
@@ -146,10 +246,10 @@ def analyze_content_with_factchat(title, description):
             result_text = result_text[result_text.find("{"):result_text.rfind("}")+1]
         return json.loads(result_text)
     except Exception as e:
-        return {"summary": f"요약 중 통신 오류 발생: {e}", "is_negative": False, "point": ""}
+        return {"summary": f"요약 분석 중 오류 발생: {e}", "is_negative": False, "point": ""}
 
 # ==========================================
-# 4. 화면 UI 렌더링 (사이드바 / 메인 분리)
+# 5. 화면 UI 렌더링
 # ==========================================
 
 # --- [사이드바 통제실] ---
@@ -160,7 +260,7 @@ with st.sidebar:
     sort_option = st.radio("데이터 정렬 방식", ["정확도/인기순 (sim)", "최신순 (date)"])
     sort_param = "sim" if "sim" in sort_option else "date"
     
-    display_count = st.slider("채널별 수집 건수", min_value=5, max_value=30, value=10, step=5)
+    display_count = st.slider("채널별 표시 건수", min_value=5, max_value=30, value=10, step=5)
     st.divider()
     
     st.subheader("2. 키워드 선택")
@@ -187,59 +287,70 @@ with st.sidebar:
 # --- [메인 데이터 패널] ---
 if selected_kw:
     st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
-    st.caption(f"기준: {sort_option.split(' ')[0]} | 채널당 {display_count}건 수집")
+    st.caption(f"기준: {sort_option.split(' ')[0]} | 유사 중복 기사 자동 클러스터링 & 공신력 대표 보도 엄선")
     
-    tab_news, tab_comm = st.tabs(["📡 언론 보도 (News)", "💬 지역 여론 (블로그/카페)"])
+    tab_news, tab_comm = st.tabs(["📡 대표 언론 보도 (중복제거 적용)", "💬 지역 여론 (블로그/카페)"])
 
-    def clean_html(text):
-        return text.replace('<b>', '').replace('</b>', '').replace('&quot;', '"').replace('&lt;', '<').replace('&gt;', '>')
-
-    def render_article_card(item, unique_key, source_type="news"):
+    def render_article_card(item_info, unique_key, source_type="news"):
+        if isinstance(item_info, dict) and "representative" in item_info:
+            item = item_info["representative"]
+            dup_cnt = item_info["duplicates_count"]
+        else:
+            item = item_info
+            dup_cnt = 1
+            
         title = clean_html(item['title'])
         desc = clean_html(item.get('description', item.get('desc', '')))
         link = item['link']
         date = item.get('pubDate', item.get('postdate', ''))
-        date_html = f'<div style="font-size: 12px; color: #888; margin-bottom: 16px;">🕒 {date}</div>' if date else ''
+        date_html = f'<div style="font-size: 12px; color: #64748b; margin-bottom: 14px;">🕒 {date}</div>' if date else ''
         
+        tags_html = ""
         if source_type == "news":
-            tag_html = "<span class='tag-badge tag-news'>📡 언론보도</span>"
+            tags_html += "<span class='tag-badge tag-news'>📡 대표 언론보도</span>"
         elif source_type == "blog":
-            tag_html = "<span class='tag-badge tag-blog'>📌 네이버 블로그</span>"
+            tags_html += "<span class='tag-badge tag-blog'>📌 네이버 블로그</span>"
         else:
             cafe_name = item.get('cafename', '지역 커뮤니티')
-            tag_html = f"<span class='tag-badge tag-cafe'>👥 네이버 카페 ({cafe_name})</span>"
+            tags_html += f"<span class='tag-badge tag-cafe'>👥 네이버 카페 ({cafe_name})</span>"
+            
+        if dup_cnt > 1:
+            tags_html += f"<span class='tag-badge tag-dedup'>📑 유사 중복 기사 {dup_cnt}건 통합 묶음</span>"
 
         html_content = f"""<div class="report-card">
-{tag_html}
-<h4 style="margin-top: 0; margin-bottom: 8px; font-size: 18px;">
-    <a href="{link}" target="_blank" style="text-decoration: none; color: #1a73e8; font-weight: 600;">{title}</a>
+{tags_html}
+<h4 style="margin-top: 0; margin-bottom: 8px; font-size: 18px; line-height: 1.4;">
+    <a href="{link}" target="_blank" style="text-decoration: none; color: #1e3a8a; font-weight: 700;">{title}</a>
 </h4>
 {date_html}
-<p style="font-size: 15px; color: #444; line-height: 1.6; margin: 0;">{desc}</p>
+<p style="font-size: 14.8px; color: #334155; line-height: 1.65; margin: 0;">{desc}</p>
 </div>"""
 
         st.markdown(html_content, unsafe_allow_html=True)
         
         if link in st.session_state.llm_results:
             analysis = st.session_state.llm_results[link]
-            with st.container(border=True):
-                if analysis.get("is_negative"):
-                    st.error(f"⚠️ **[리스크 요점 추출]:** {analysis.get('point')}")
-                st.success(f"**🤖 FACTCHAT 핵심 요약**\n\n{analysis.get('summary')}")
+            if analysis.get("is_negative"):
+                st.markdown(f'<div class="analysis-card-risk"><b>⚠️ [시민 민원 / 여론 리스크 감지]</b>\n{analysis.get("point")}\n\n{analysis.get("summary")}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="analysis-card-neutral"><b>🤖 [FACTCHAT 세련된 AI 심층 브리핑]</b>\n{analysis.get("summary")}</div>', unsafe_allow_html=True)
         else:
-            if st.button("🔍 AI 심층 요약 및 리스크 분석", key=f"btn_{unique_key}", use_container_width=True):
-                with st.spinner("AI 분석가가 핵심을 추려내고 있습니다..."):
+            if st.button("🔍 AI 심층 브리핑 및 리스크 분석", key=f"btn_{unique_key}", use_container_width=True):
+                with st.spinner("AI 수석 분석가가 기사 맥락과 리스크를 정밀 분석 중..."):
                     st.session_state.llm_results[link] = analyze_content_with_factchat(title, desc)
                     st.rerun()
         st.write("")
 
     with tab_news:
-        news_items = fetch_naver_data(selected_kw, display_count, sort_param, "news")
-        if news_items:
-            for i, item in enumerate(news_items):
-                render_article_card(item, unique_key=f"news_{selected_kw}_{i}", source_type="news")
+        raw_news_items = fetch_naver_data(selected_kw, display_count, sort_param, "news")
+        news_clusters = deduplicate_news_items(raw_news_items, similarity_threshold=0.55)
+        news_clusters = news_clusters[:display_count]
+        
+        if news_clusters:
+            for i, cluster in enumerate(news_clusters):
+                render_article_card(cluster, unique_key=f"news_{selected_kw}_{i}", source_type="news")
         else:
-            st.info("조건에 일치하는 보도자료가 검색되지 않았습니다. (네이버 API Key 설정을 확인해 주세요.)")
+            st.info("조건에 일치하는 보도자료가 검색되지 않았습니다.")
 
     with tab_comm:
         blogs = fetch_naver_data(selected_kw, display_count, sort_param, "blog")
