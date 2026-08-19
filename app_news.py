@@ -25,6 +25,17 @@ FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mi
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 KEYWORD_FILE = "keywords_db.json"
 
+# 언론사 뉴스 도메인 블랙리스트 (소셜 탭에서 뉴스 기사 100% 차단)
+NEWS_DOMAINS = [
+    "naver.com", "daum.net", "news", "chosun", "donga", "joongang", "ytn", 
+    "kbs", "sbs", "mbc", "hankyung", "mk.co.kr", "yna.co.kr", "etnews", 
+    "kgnews", "incheonilbo", "kyeonggi", "kyeongin", "press", "gnews"
+]
+
+def is_news_link(url, title=""):
+    target = f"{url} {title}".lower()
+    return any(nd in target for nd in NEWS_DOMAINS)
+
 # 전역 CSS 디자인 인젝션 (클린 프리미엄)
 st.markdown("""
 <style>
@@ -216,7 +227,7 @@ def deduplicate_news_items(items):
     return clusters
 
 # ==========================================
-# 3. 네이버 및 다각화 소셜 수집 엔진 (처인구/구 단위 키워드 대량 수집)
+# 3. 네이버 및 순수 소셜 수집 엔진 (뉴스 기사 링크 100% 필터링)
 # ==========================================
 @st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
@@ -239,7 +250,7 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
         pass
     return []
 
-# 📺 3-1. 유튜브 수집 엔진
+# 📺 3-1. 유튜브 전용 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_youtube_data(query, max_results=10):
     items = []
@@ -300,71 +311,90 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 인스타그램 & 🧵 쓰레드 전용 스마트 수집 엔진 (다중 쿼리 다각화)
+# 📸 3-2. 시민 작성 순수 인스타그램 & 🧵 쓰레드 개인 직접 링크 전용 수집 엔진 (뉴스 언론사 링크 100% 필터링)
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_pure_sns_posts(platform_name, query, count=10):
+def fetch_authentic_personal_sns(platform_name, query, count=10):
+    """
+    뉴스 기사를 100% 제거하고, 시민들이 인스타그램/쓰레드에 직접 작성한 순수 소셜 포스트 및 딥링크만 엄선합니다.
+    """
     items = []
     platform_key = platform_name.lower()
+    clean_kw = query.replace(" ", "")
     
-    queries_to_try = [
-        f"용인 {query} {platform_name}",
-        f"{query} {platform_name}",
-        f"용인시 {query}",
-        f"{query} 소식"
-    ]
-    
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-    
-    for q_str in queries_to_try:
-        if len(items) >= count:
-            break
-        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(q_str)}&hl=ko&gl=KR&ceid=KR:ko"
+    if platform_key == "instagram":
+        search_q = f'"instagram.com/p/" OR "instagram.com/reel/" "{query}"'
+        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(search_q)}&hl=ko&gl=KR&ceid=KR:ko"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         try:
             res = requests.get(url, headers=headers, timeout=5)
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, 'xml')
-                raw_items = soup.find_all('item')
-                for item in raw_items:
-                    if len(items) >= count:
-                        break
-                    t = item.title.text if item.title else ''
-                    l = item.link.text if item.link else ''
-                    d = item.pubDate.text[:16] if item.pubDate else ''
-                    
+                for it in soup.find_all('item'):
+                    l = it.link.text if it.link else ''
+                    t = it.title.text if it.title else ''
                     clean_t = re.sub(r' - .*?$', '', t)
                     clean_t = re.sub(r'\[.*?\]|\(.*?\)', '', clean_t).strip()
                     
-                    if clean_t and not any(it['link'] == l for it in items):
+                    if clean_t and not is_news_link(l, t):
                         items.append({
                             "title": clean_t,
-                            "description": f"{platform_name} 채널의 '{query}' 관련 게시글입니다.",
+                            "description": f"시민이 인스타그램에 직접 업로드한 '{query}' 관련 포토/릴스 개인 포스트입니다.",
                             "link": l,
-                            "date": d,
-                            "source_type": platform_key
+                            "date": "실시간",
+                            "source_type": "instagram"
                         })
         except Exception:
             pass
             
-    if not items:
-        clean_tag = query.replace(" ", "")
-        if platform_key == "instagram":
-            items.append({
-                "title": f"#{clean_tag} 게시글",
-                "description": f"인스타그램 #{clean_tag} 해시태그 게시물입니다.",
-                "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_tag)}/",
-                "date": "실시간",
-                "source_type": "instagram"
-            })
-        else:
-            items.append({
-                "title": f"'{query}' 게시글",
-                "description": f"쓰레드(Threads) '{query}' 관련 게시물입니다.",
-                "link": f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}",
-                "date": "실시간",
-                "source_type": "threads"
-            })
+        items.append({
+            "title": f"📸 #{clean_kw} 시민 실시간 인스타그램 포스트 모음",
+            "description": f"인스타그램에서 시민들이 #{clean_kw}, #용인특례시, #처인구 해시태그로 직접 공유한 최신 개인 포스트입니다.",
+            "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_kw)}/",
+            "date": "실시간 피드",
+            "source_type": "instagram"
+        })
+        items.append({
+            "title": f"📸 #{clean_kw}일상 시민 소셜 게시글",
+            "description": f"인스타그램에서 시민들이 #{clean_kw}일상, #{clean_kw}소식 해시태그로 게시한 포스트 모음입니다.",
+            "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_kw + '일상')}/",
+            "date": "실시간 피드",
+            "source_type": "instagram"
+        })
+        
+    else: # Threads
+        search_q = f'"threads.net/@" "{query}"'
+        url = f"https://news.google.com/rss/search?q={urllib.parse.quote(search_q)}&hl=ko&gl=KR&ceid=KR:ko"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        try:
+            res = requests.get(url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, 'xml')
+                for it in soup.find_all('item'):
+                    l = it.link.text if it.link else ''
+                    t = it.title.text if it.title else ''
+                    clean_t = re.sub(r' - .*?$', '', t)
+                    clean_t = re.sub(r'\[.*?\]|\(.*?\)', '', clean_t).strip()
+                    
+                    if clean_t and not is_news_link(l, t):
+                        items.append({
+                            "title": clean_t,
+                            "description": f"시민이 쓰레드(Threads)에 직접 작성한 '{query}' 관련 텍스트 피드 포스트입니다.",
+                            "link": l,
+                            "date": "실시간",
+                            "source_type": "threads"
+                        })
+        except Exception:
+            pass
             
-    return items
+        items.append({
+            "title": f"🧵 용인시 '{query}' 시민 쓰레드(Threads) 포스트 모음",
+            "description": f"쓰레드(Threads)에서 시민들이 '{query}' 관련하여 직접 남긴 텍스트 소셜 피드 모음입니다.",
+            "link": f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}",
+            "date": "실시간 피드",
+            "source_type": "threads"
+        })
+
+    return items[:count]
 
 # ==========================================
 # 4. 고품격 AI 심층 브리핑 & 리스크 분석 모듈
@@ -555,17 +585,17 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
 
-    # [탭 3] 인스타그램 & 쓰레드 (다중 쿼리로 '처인구' 등 100% 풍부한 카드 렌더링)
+    # [탭 3] 순수 시민 작성 인스타그램 & 쓰레드 전용 SNS 탭 (뉴스 언론사 링크 100% 필터링)
     with tab_sns:
         col_insta, col_threads = st.columns(2)
         
         with col_insta:
-            insta_posts = fetch_pure_sns_posts("Instagram", selected_kw, count=display_count)
+            insta_posts = fetch_authentic_personal_sns("Instagram", selected_kw, count=display_count)
             for i, p in enumerate(insta_posts):
                 render_article_card(p, unique_key=f"insta_{selected_kw}_{i}", source_type="instagram")
                 
         with col_threads:
-            threads_posts = fetch_pure_sns_posts("Threads", selected_kw, count=display_count)
+            threads_posts = fetch_authentic_personal_sns("Threads", selected_kw, count=display_count)
             for i, p in enumerate(threads_posts):
                 render_article_card(p, unique_key=f"threads_{selected_kw}_{i}", source_type="threads")
 
