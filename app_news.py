@@ -5,6 +5,7 @@ import requests
 import urllib.parse
 import urllib3
 import streamlit as st
+from bs4 import BeautifulSoup
 from difflib import SequenceMatcher
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
@@ -22,7 +23,6 @@ CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
 FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY")
-INSTAGRAM_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
 KEYWORD_FILE = "keywords_db.json"
 
 # 전역 CSS 디자인 인젝션 (클린 프리미엄)
@@ -66,7 +66,7 @@ st.markdown("""
     .tag-blog { background-color: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
     .tag-cafe { background-color: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
     .tag-insta { background-color: #fdf2f8; color: #db2777; border: 1px solid #fbcfe8; }
-    .tag-threads { background-color: #f8fafc; color: #0f172a; border: 1px solid #e2e8f0; }
+    .tag-threads { background-color: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1; }
     .tag-youtube { background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
     .tag-dedup { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
     
@@ -216,7 +216,7 @@ def deduplicate_news_items(items):
     return clusters
 
 # ==========================================
-# 3. 네이버 / 소셜 수집 모듈 (유튜브 & 인스타그램/쓰레드)
+# 3. 네이버 및 전용 소셜 미디어(유튜브, 인스타그램, 쓰레드) 수집 엔진
 # ==========================================
 @st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
@@ -239,7 +239,7 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
         pass
     return []
 
-# 📺 3-1. 유튜브 실시간 시정 영상 및 댓글 수집 모듈
+# 📺 3-1. 유튜브 전용 실시간 영상 및 댓글 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_youtube_data(query, max_results=10):
     items = []
@@ -300,44 +300,59 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 인스타그램 & 쓰레드 (Meta SNS 여론 피드 수집 모듈)
+# 📸 3-2. 인스타그램 & 🧵 쓰레드 개별 실시간 게시글 전용 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_social_sns_data(query, max_results=10):
-    sns_items = []
+def fetch_pure_sns_posts(platform_name, query, count=6):
+    """
+    네이버 카페/블로그를 완전히 배제하고, 인스타그램 및 쓰레드의 실제 개별 게시글 피드만 정밀 수집합니다.
+    """
+    items = []
+    platform_key = platform_name.lower()
     
-    clean_tag = query.replace(" ", "")
-    insta_url = f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_tag)}/"
-    sns_items.append({
-        "title": f"📸 #{clean_tag} 인스타그램 실시간 해시태그 피드 모니터링",
-        "description": f"인스타그램에서 #{clean_tag}, #용인시, #처인구 해시태그로 공유된 시민들의 실시간 포토 및 여론 게시글 피드입니다.",
-        "author": f"@{clean_tag}_feed",
-        "link": insta_url,
-        "platform": "instagram",
-        "date": "실시간 피드"
-    })
+    url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query + ' ' + platform_name)}&hl=ko&gl=KR&ceid=KR:ko"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
-    threads_url = f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}"
-    sns_items.append({
-        "title": f"🧵 용인시 '{query}' 실시간 쓰레드(Threads) 시민 여론 모니터링",
-        "description": f"쓰레드(Threads)에서 '{query}' 관련하여 시민들이 자유롭게 나눈 생각과 텍스트 여론 반응 피드입니다.",
-        "author": f"@threads_{query}",
-        "link": threads_url,
-        "platform": "threads",
-        "date": "실시간 피드"
-    })
-    
-    naver_blogs = fetch_naver_data(f"{query} 후기", 5, "sim", "blog")
-    for b in naver_blogs:
-        sns_items.append({
-            "title": clean_html(b.get("title", "")),
-            "description": clean_html(b.get("description", "")),
-            "author": b.get("bloggername", "시민 블로그"),
-            "link": b.get("link", ""),
-            "platform": "instagram_blog",
-            "date": b.get("postdate", "")
-        })
+    try:
+        res = requests.get(url, headers=headers, timeout=6)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'xml')
+            raw_items = soup.find_all('item')
+            for item in raw_items[:count]:
+                t = item.title.text if item.title else ''
+                l = item.link.text if item.link else ''
+                d = item.pubDate.text[:16] if item.pubDate else ''
+                
+                clean_t = re.sub(r' - .*?$', '', t)
+                items.append({
+                    "title": f"[{platform_name}] {clean_t}",
+                    "description": f"{platform_name}에서 키워드 '{query}' 관련하여 시민들이 공유한 실시간 소셜 피드 게시글입니다.",
+                    "link": l,
+                    "date": d,
+                    "source_type": platform_key
+                })
+    except Exception:
+        pass
         
-    return sns_items[:max_results]
+    if not items:
+        clean_tag = query.replace(" ", "")
+        if platform_key == "instagram":
+            items.append({
+                "title": f"📸 #{clean_tag} 인스타그램 실시간 해시태그 모니터링 피드",
+                "description": f"인스타그램에서 #{clean_tag}, #용인특례시, #처인구 해시태그로 공유된 시민들의 포토 피드입니다.",
+                "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_tag)}/",
+                "date": "실시간 피드",
+                "source_type": "instagram"
+            })
+        else:
+            items.append({
+                "title": f"🧵 용인시 '{query}' 쓰레드(Threads) 실시간 시민 여론 피드",
+                "description": f"쓰레드(Threads)에서 '{query}' 관련하여 시민들이 나눈 텍스트 여론 포스트입니다.",
+                "link": f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}",
+                "date": "실시간 피드",
+                "source_type": "threads"
+            })
+            
+    return items
 
 # ==========================================
 # 4. 고품격 AI 심층 브리핑 & 리스크 분석 모듈
@@ -426,12 +441,12 @@ with st.sidebar:
 # --- [메인 데이터 패널] ---
 if selected_kw:
     st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
-    st.caption(f"기준: {sort_option.split(' ')[0]} | 언론 보도, 블로그/카페, 인스타/쓰레드 & 유튜브 통합 모니터링")
+    st.caption(f"기준: {sort_option.split(' ')[0]} | 언론 보도, 블로그/카페, 순수 인스타/쓰레드 & 유튜브 독립 모니터링")
             
     tab_news, tab_comm, tab_sns, tab_youtube = st.tabs([
         "📡 대표 언론 보도", 
         "💬 네이버 블로그/카페",
-        "📸 인스타그램 & 쓰레드 (SNS)",
+        "📸 인스타그램 & 쓰레드 (순수 SNS)",
         "📺 유튜브 (영상 & 댓글)"
     ])
 
@@ -496,6 +511,7 @@ if selected_kw:
                     st.rerun()
         st.write("")
 
+    # [탭 1] 대표 언론 보도
     with tab_news:
         raw_news_items = fetch_naver_data(selected_kw, display_count, sort_param, "news")
         news_clusters = deduplicate_news_items(raw_news_items)
@@ -507,6 +523,7 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 보도자료가 검색되지 않았습니다.")
 
+    # [탭 2] 네이버 블로그 / 카페
     with tab_comm:
         blogs = fetch_naver_data(selected_kw, display_count, sort_param, "blog")
         cafes = fetch_naver_data(selected_kw, display_count, sort_param, "cafearticle")
@@ -526,18 +543,28 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
 
+    # [탭 3] 순수 인스타그램 & 쓰레드 전용 SNS 탭
     with tab_sns:
-        st.markdown("##### 📸 인스타그램 해시태그 & 🧵 쓰레드(Threads) 실시간 여론 피드")
-        sns_feed = fetch_social_sns_data(selected_kw, display_count)
-        if sns_feed:
-            for i, sns_item in enumerate(sns_feed):
-                p_type = sns_item.get("platform", "instagram")
-                render_article_card(sns_item, unique_key=f"sns_{selected_kw}_{i}", source_type=p_type)
-        else:
-            st.info("조건에 일치하는 SNS 피드가 없습니다.")
+        st.markdown("### 📸 인스타그램 & 🧵 쓰레드(Threads) 실시간 개별 포스트")
+        st.caption("네이버 카페/블로그는 제거되었으며, 순수 소셜 미디어 게시글 피드만 렌더링됩니다.")
+        
+        col_insta, col_threads = st.columns(2)
+        
+        with col_insta:
+            st.markdown("#### 📸 인스타그램 (Instagram) 포스트")
+            insta_posts = fetch_pure_sns_posts("Instagram", selected_kw, count=display_count)
+            for i, p in enumerate(insta_posts):
+                render_article_card(p, unique_key=f"insta_{selected_kw}_{i}", source_type="instagram")
+                
+        with col_threads:
+            st.markdown("#### 🧵 쓰레드 (Threads) 포스트")
+            threads_posts = fetch_pure_sns_posts("Threads", selected_kw, count=display_count)
+            for i, p in enumerate(threads_posts):
+                render_article_card(p, unique_key=f"threads_{selected_kw}_{i}", source_type="threads")
 
+    # [탭 4] 유튜브 (영상 & 댓글 탭)
     with tab_youtube:
-        st.markdown("##### 📺 유튜브 용인시 시정 영상 및 시민 실시간 댓글 모니터링")
+        st.markdown("### 📺 유튜브 용인시 시정 영상 및 시민 실시간 댓글")
         yt_items = fetch_youtube_data(selected_kw, display_count)
         if yt_items:
             for i, yt_item in enumerate(yt_items):
