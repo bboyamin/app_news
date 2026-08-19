@@ -25,7 +25,7 @@ data_manager.ensure_data_dir()
 # 시선집중 UX/UI 프리미엄 오피스 테마 CSS
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif !important;
@@ -80,71 +80,54 @@ st.markdown("""
         color: #1e3a8a;
     }
 
-    /* 🌟 검색 키워드 시선 집중 모던 대형 콘솔 박스 */
-    .search-console-card {
-        background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
-        border: 2px solid #2563eb;
-        border-radius: 16px;
-        padding: 20px 24px 16px 24px;
-        margin-top: 10px;
-        margin-bottom: 14px;
-        box-shadow: 0 10px 25px rgba(37, 99, 235, 0.15);
-    }
-    
-    .search-console-title {
-        font-size: 19px;
-        font-weight: 800;
-        color: #1e3a8a;
-        margin-bottom: 6px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
+    /* 🌟 파란색 테두리 검색 박스 스타일링 (검색창 내포 단일 카드) */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%) !important;
+        border: 2.5px solid #2563eb !important;
+        border-radius: 16px !important;
+        padding: 22px 26px !important;
+        box-shadow: 0 10px 25px rgba(37, 99, 235, 0.12) !important;
+        margin-top: 10px !important;
+        margin-bottom: 16px !important;
     }
 
-    /* 🌟 시선 강탈 대형 프리미엄 텍스트 입력 박스 커스텀 CSS */
+    /* 🌟 대형 텍스트 입력 박스 커스텀 CSS */
     div[data-testid="stTextInput"] {
-        margin-top: 4px;
-        margin-bottom: 8px;
-    }
-
-    div[data-testid="stTextInput"] label {
-        font-size: 16px !important;
-        font-weight: 800 !important;
-        color: #1e3a8a !important;
-        margin-bottom: 8px !important;
+        margin-top: 6px;
+        margin-bottom: 4px;
     }
 
     div[data-baseweb="input"] {
-        border-radius: 14px !important;
-        border: 3px solid #2563eb !important;
+        border-radius: 12px !important;
+        border: 2px solid #cbd5e1 !important;
         background-color: #ffffff !important;
         padding: 6px 14px !important;
-        height: 58px !important;
-        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.12) !important;
+        height: 56px !important;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04) !important;
         transition: all 0.25s ease-in-out !important;
     }
     
     div[data-baseweb="input"]:hover {
-        border-color: #1d4ed8 !important;
-        box-shadow: 0 8px 22px rgba(29, 78, 216, 0.2) !important;
+        border-color: #2563eb !important;
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.15) !important;
     }
     
     div[data-baseweb="input"]:focus-within {
         border-color: #1d4ed8 !important;
         background-color: #ffffff !important;
-        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.25), 0 10px 28px rgba(37, 99, 235, 0.22) !important;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22), 0 8px 22px rgba(37, 99, 235, 0.18) !important;
     }
     
     div[data-baseweb="input"] input {
-        font-size: 18px !important;
+        font-size: 17.5px !important;
         font-weight: 700 !important;
         color: #0f172a !important;
-        padding-left: 10px !important;
+        padding-left: 8px !important;
     }
 
     div[data-baseweb="input"] input::placeholder {
         color: #64748b !important;
-        font-size: 15.5px !important;
+        font-size: 15px !important;
         font-weight: 500 !important;
     }
 
@@ -250,7 +233,7 @@ for d in df_year['부서명'].dropna().unique():
 
 all_depts = ["전체"] + csv_dept_list
 
-# 🌟 예산확정 날짜/순서 참고 정렬 알고리즘 (본예산 -> 추경1회 -> 추경2회 -> 추경3회... -> 이월예산)
+# 예산확정 날짜/순서 참고 정렬 알고리즘 (본예산 -> 추경1회 -> 추경2회 -> 추경3회... -> 이월예산)
 raw_type_list = [str(t).strip() for t in df_year['예산구분'].dropna().unique() if str(t).strip() not in ['-', 'nan', 'N/A', '']]
 
 def get_budget_type_sort_key(t_str):
@@ -297,26 +280,24 @@ if sel_budget_type != "전체":
     filtered_df = filtered_df[filtered_df['예산구분'] == sel_budget_type]
 
 # ==========================================
-# 4. 실시간 통합 키워드 검색창 (시선집중 프리미엄 대형 콘솔)
+# 4. 실시간 통합 키워드 검색창 (파란색 테두리 박스 내부 단일 내포 구조)
 # ==========================================
 st.markdown("---")
-st.markdown("""
-<div class="search-console-card">
-    <div class="search-console-title">
-        <span style="background: #2563eb; color: #ffffff; padding: 4px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 800;">LIVE SEARCH</span>
+with st.container(border=True):
+    st.markdown("""
+    <div style="font-size: 18px; font-weight: 800; color: #1e3a8a; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
         <span>🔎 스마트 세출 예산 통합 키워드 검색</span>
     </div>
-    <div style="font-size: 14px; color: #334155; margin-top: 6px; font-weight: 500;">
+    <div style="font-size: 13.5px; color: #475569; margin-bottom: 10px;">
         💡 사업명, 소관 부서, 세부항목, 산출근거 수식 단어를 입력하시면 <b>10개 필드에서 0.1초 만에 실시간 탐색</b>됩니다.
     </div>
-</div>
-""", unsafe_allow_html=True)
-
-search_keyword = st.text_input(
-    "🔎 원하시는 통합 검색어를 입력하세요", 
-    placeholder="👉 자유롭게 검색어를 입력하세요 (예: 정보화 교육, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)",
-    label_visibility="visible"
-)
+    """, unsafe_allow_html=True)
+    
+    search_keyword = st.text_input(
+        "검색어 입력", 
+        placeholder="👉 원하시는 검색어를 입력하세요 (예: 정보화 교육, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)",
+        label_visibility="collapsed"
+    )
 
 search_df = filtered_df.copy()
 if search_keyword.strip():
