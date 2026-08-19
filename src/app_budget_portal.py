@@ -152,10 +152,6 @@ def get_symbol_level(name):
     return 4
 
 def get_budget_type_sort_key(t_str):
-    """
-    본예산 ➔ 추경1회 ➔ 추경2회 ➔ 추경3회 성립전1차 ➔ 추경3회 성립전2차 ➔ 추경3회 성립전3차 ➔ 간주1차 ➔ 이월예산
-    예산확정 날짜 및 성립전 차수까지 완벽 대응 정렬 키
-    """
     s = str(t_str).strip()
     if '본예산' in s or '당초' in s or s == '본':
         return (1, 0, 0, s)
@@ -199,11 +195,6 @@ def normalize_item_name(name):
 
 @st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
-    """
-    0단계: 상위 대항목 헤더 바인딩
-    1단계: Multi-level 3계층(대항목/중항목/소항목) 소계 헤더 자동 차감 엔진
-    2단계: 성립전 1차/2차/3차 정밀 정렬을 반영한 경정 대체 정산
-    """
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
@@ -212,7 +203,6 @@ def load_and_prepare_year_data(year):
     df_copy['정산 상태'] = '✅ 정산 포함'
     df_copy['parent_header'] = ''
 
-    # 0단계: 각 행별 상위 부모 헤더(Big Circle 명칭) 바인딩
     for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
         records = group.to_dict('records')
         orig_indices = group.index.tolist()
@@ -227,7 +217,6 @@ def load_and_prepare_year_data(year):
 
     df_copy['parent_norm'] = df_copy['parent_header'].apply(normalize_item_name)
 
-    # 1단계: Multi-level 계층 구조 소계 중복 감지
     circle_excluded_indices = set()
     for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
         records = group.to_dict('records')
@@ -265,7 +254,6 @@ def load_and_prepare_year_data(year):
     for idx in circle_excluded_indices:
         df_copy.loc[idx, '정산 상태'] = '🔻 소계 중복 제외'
 
-    # 2단계: 부모 헤더 스코프 기반 정규화 경정 대체 정산
     non_circle_df = df_copy[df_copy['정산 상태'] == '✅ 정산 포함'].copy()
     non_circle_df['norm_name'] = non_circle_df['산출근거명'].apply(normalize_item_name)
     non_circle_df['sort_key'] = non_circle_df['예산구분'].apply(get_budget_type_sort_key)
@@ -467,13 +455,13 @@ with col_m3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 7. 검색 결과 테이블 표출 (단정한 프로덕션 기본 컬럼)
+# 7. 검색 결과 테이블 표출 (전체 100% 렌더링 적용)
 # ==========================================
 display_cols = ['예산구분', '부서명', '회계명', '세부사업명', '편성목명', '통계목명', '산출근거명', '산출근거식', '예산액_num', '의무/재량구분']
 
 col_t1, col_t2 = st.columns([3, 1])
 with col_t1:
-    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건)")
+    st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건 - 전체 100% 표출)")
 with col_t2:
     safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
     download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
@@ -492,17 +480,13 @@ with col_t2:
         key="btn_download_csv"
     )
 
-total_cnt = len(search_df)
-show_table_df = search_df[display_cols].head(200).copy()
+show_table_df = search_df[display_cols].copy()
 show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
-
-if total_cnt > 200:
-    st.caption(f"💡 전체 {total_cnt:,}건 중 상위 200건을 표출합니다. (전체 {total_cnt:,}건 내역은 우측 📥 '엑셀/CSV 다운로드' 버튼을 누르시면 100% 엑셀 파일로 바로 다운로드됩니다)")
 
 st.dataframe(
     show_table_df,
     use_container_width=True,
-    height=450,
+    height=520,
     column_config={
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
