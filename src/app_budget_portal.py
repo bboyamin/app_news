@@ -168,8 +168,8 @@ def normalize_item_name(name):
 @st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
     """
-    1단계: 순차적 동그라미 계층 구조 소계 중복 감지 (Big Circle 직후 연결된 Small Circle만 세부항목 바인딩)
-    2단계: 서로 다른 예산구분(본예산 vs 추경) 간에만 최신 버전 경정 대체 마킹 (동일 예산구분 내 국도비/자체재원 병렬 유지)
+    1단계: 대항목 수식 유무 및 하위 항목 존재 여부에 기반한 무결 소계 헤더 중복 감지
+    2단계: 서로 다른 예산구분(본예산 vs 추경) 간에만 최신 버전 경정 대체 마킹
     """
     df = data_manager.load_year_data(year)
     if df.empty:
@@ -178,7 +178,7 @@ def load_and_prepare_year_data(year):
     df_copy = df.copy()
     df_copy['정산 상태'] = '✅ 정산 포함'
 
-    # 1단계: 순차적 동그라미 계층 구조 소계 중복 감지
+    # 1단계: 순차적 동그라미 계층 구조 소계 중복 감지 (무수식 헤더 + 세부항목 감지)
     circle_excluded_indices = set()
     for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
         records = group.to_dict('records')
@@ -189,6 +189,8 @@ def load_and_prepare_year_data(year):
             c_name = records[i]['산출근거명']
             if is_big_circle(c_name):
                 big_b = records[i]['예산액_num']
+                formula = str(records[i]['산출근거식']).strip()
+
                 small_sum = 0
                 small_cnt = 0
                 j = i + 1
@@ -199,10 +201,13 @@ def load_and_prepare_year_data(year):
                     small_sum += records[j]['예산액_num']
                     small_cnt += 1
                     j += 1
-                if small_cnt > 0 and (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.03):
-                    circle_excluded_indices.add(orig_indices[i])
-                    i = j
-                    continue
+
+                # 하위 세부항목이 존재하는 경우: 수식이 없거나('-') 합이 일치하면 소계 헤더로 판단
+                if small_cnt > 0:
+                    if formula in ['-', '', 'nan', 'None'] or (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.03):
+                        circle_excluded_indices.add(orig_indices[i])
+                        i = j
+                        continue
             i += 1
 
     for idx in circle_excluded_indices:
@@ -546,7 +551,7 @@ if not search_df.empty:
             
         with col_t2:
             st.markdown("##### 📋 지출 구조 정산 요약표")
-            type_group.columns = ['지출구분', '예산합계(천원)', '건수', '예산합계(억원)']
+            type_group.columns = ['지출구분', '예산합계(억원)', '예산합계(천원)', '건수'],
             st.dataframe(
                 type_group[['지출구분', '예산합계(억원)', '예산합계(천원)', '건수']],
                 use_container_width=True,
