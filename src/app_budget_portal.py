@@ -201,7 +201,7 @@ def normalize_item_name(name):
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 
 @st.cache_data(show_spinner=False)
-def load_and_prepare_year_data(year, cache_version="v2.1"):
+def load_and_prepare_year_data(year, cache_version="v2.2"):
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
@@ -237,18 +237,14 @@ def load_and_prepare_year_data(year, cache_version="v2.1"):
 
             if curr_lvl == 1:
                 j = i + 1
-                has_children = False
                 while j < n:
                     next_name = records[j]['산출근거명']
                     next_lvl = get_symbol_level(next_name)
                     if next_lvl == 1:
                         break
-                    has_children = True
+                    circle_excluded_indices.add(orig_indices[j])
                     j += 1
-
-                if has_children:
-                    for k in range(i + 1, j):
-                        circle_excluded_indices.add(orig_indices[k])
+                i = j - 1
             elif curr_lvl in [2, 3]:
                 big_b = records[i]['예산액_num']
                 formula = str(records[i]['산출근거식']).strip()
