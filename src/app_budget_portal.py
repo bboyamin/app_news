@@ -379,9 +379,10 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# 4. 드롭다운 필터 바 (회계구분 / 소관부서 / 예산확정 순 정렬 예산구분)
-# ==========================================
+if df_year.empty:
+    st.warning(f"⚠️ {selected_year}년도 예산서 데이터가 삭제되었거나 존재하지 않습니다. 사이드바 '🔒 [관리자] 예산서 데이터 관리' 메뉴에서 비밀번호(0914)를 입력하신 후 새로운 CSV 예산서 파일을 업로드해 주세요.")
+    st.stop()
+
 valid_acct_df = df_year[df_year['회계명'].str.endswith('회계', na=False)]
 acct_order = valid_acct_df.groupby('회계명')['예산액_억원'].sum().sort_values(ascending=False).index.tolist()
 all_accts = ["전체"] + acct_order

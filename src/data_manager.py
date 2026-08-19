@@ -154,10 +154,6 @@ def load_year_data(year):
     ensure_data_dir()
     filepath = os.path.join(DATA_DIR, f"budget_{year}.csv")
     if not os.path.exists(filepath):
-        if year_key == "2026" and os.path.exists(TEMP_DOC_PATH):
-            df = load_raw_csv(TEMP_DOC_PATH)
-            save_processed_csv(df, 2026)
-            return df
         return pd.DataFrame()
         
     df_raw = read_csv_robust(filepath)
