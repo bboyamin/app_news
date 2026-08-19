@@ -131,28 +131,14 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* 산출근거 수식 카드 */
-    .detail-box {
+    /* 세부 분석 전용 카드 */
+    .analysis-section-card {
         background: #ffffff;
-        border-left: 5px solid #0d9488;
-        padding: 18px;
-        border-radius: 10px;
-        margin-top: 14px;
-        border-top: 1px solid #e2e8f0;
-        border-right: 1px solid #e2e8f0;
-        border-bottom: 1px solid #e2e8f0;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
-    }
-    
-    .formula-tag {
-        background-color: #f0fdf4;
-        color: #166534;
-        border: 1px solid #bbf7d0;
-        padding: 4px 10px;
-        border-radius: 6px;
-        font-family: monospace;
-        font-size: 14px;
-        font-weight: 700;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px 24px;
+        margin-top: 18px;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -330,7 +316,10 @@ if search_keyword.strip():
     search_df = search_df[final_mask]
 
 # 검색 결과 요약 메트릭 바
-col_m1, col_m2 = st.columns(2)
+total_budget_thousand = search_df['예산액_num'].sum()
+total_budget_billion = total_budget_thousand / 100000.0
+
+col_m1, col_m2, col_m3 = st.columns(3)
 
 with col_m1:
     st.markdown(f"""
@@ -341,6 +330,14 @@ with col_m1:
     """, unsafe_allow_html=True)
 
 with col_m2:
+    st.markdown(f"""
+    <div class="metric-badge">
+        <div class="metric-label">검색 예산 합계</div>
+        <div class="metric-value">{total_budget_billion:,.2f} 억 원 <span style="font-size:13px; font-weight:500; color:#64748b;">({total_budget_thousand:,.0f} 천원)</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_m3:
     st.markdown(f"""
     <div class="metric-badge">
         <div class="metric-label">조회 대상 회계연도</div>
@@ -357,11 +354,9 @@ col_t1, col_t2 = st.columns([4, 1])
 with col_t1:
     st.markdown(f"📋 **검색 결과 목록** (총 {len(search_df):,}건)")
 with col_t2:
-    # 특수문자 안전 파일명 생성
     safe_kw = re.sub(r'[^\w가-힣]', '_', search_keyword).strip('_')
     download_filename = f"예산검색결과_{selected_year}_{safe_kw if safe_kw else '전체'}.csv"
     
-    # 엑셀 다운로드용 데이터 생성
     download_df = search_df[display_cols].copy()
     download_df['예산액(천원)'] = download_df['예산액_num'].apply(lambda x: f"{int(x):,}")
     download_df = download_df.drop(columns=['예산액_num'])
@@ -376,7 +371,7 @@ with col_t2:
         key="btn_download_csv"
     )
 
-# 테이블 표출 (오른쪽 정렬 + 천원 콤마 표기 적용)
+# 테이블 표출
 total_cnt = len(search_df)
 show_table_df = search_df[display_cols].head(200).copy()
 show_table_df['예산액_num'] = show_table_df['예산액_num'].astype(int)
@@ -387,7 +382,7 @@ if total_cnt > 200:
 st.dataframe(
     show_table_df,
     use_container_width=True,
-    height=450,
+    height=420,
     column_config={
         "예산액_num": st.column_config.NumberColumn(
             "예산액 (천원)",
@@ -399,30 +394,99 @@ st.dataframe(
 )
 
 # ==========================================
-# 6. 개별 항목 세부 산출근거 수식 팝업 카드
+# 5. 스마트 실시간 예산 분석 패널 (하단 불필요 카드 완전 제거 및 데이터 기반 집계 연동)
 # ==========================================
 if not search_df.empty:
     st.markdown("---")
-    st.markdown("### 📄 세부 산출근거 수식 확인 카드")
+    st.markdown("### 📊 검색 예산 실시간 스마트 집계 패널")
     
-    sample_records = search_df[['부서명', '세부사업명', '산출근거명', '예산액_num', '정책사업명', '단위사업명', '회계명', '편성목명', '통계목명', '의무/재량구분', '산출근거식', '예산구분']].head(50).to_dict('records')
+    tab_dept, tab_stat, tab_type = st.tabs([
+        "🏢 부서별 예산 집계 Top 10",
+        "🏷️ 주요 통계목별 예산 비중",
+        "⚖️ 의무/재량 지출 구조"
+    ])
     
-    selected_idx = st.selectbox(
-        "상세 산출근거식을 확인하실 항목을 선택하세요",
-        options=list(range(len(sample_records))),
-        format_func=lambda i: f"[{sample_records[i]['부서명']}] {sample_records[i]['세부사업명']} - {sample_records[i]['산출근거명']} ({sample_records[i]['예산액_num']:,.0f} 천원)"
-    )
-    
-    item = sample_records[selected_idx]
-    budget_num = item['예산액_num']
-    
-    st.markdown(f"""
-    <div class="detail-box">
-        <h4 style="margin-top:0; color:#1e3a8a;">[{item['부서명']}] {item['세부사업명']}</h4>
-        <p><b>• 예산구분:</b> {item['예산구분']} &nbsp;|&nbsp; <b>• 정책사업:</b> {item['정책사업명']} &nbsp;|&nbsp; <b>• 단위사업:</b> {item['단위사업명']}</p>
-        <p><b>• 회계구분:</b> {item['회계명']} &nbsp;|&nbsp; <b>• 목/통계목:</b> {item['편성목명']} ({item['통계목명']})</p>
-        <p><b>• 의무/재량:</b> {item['의무/재량구분']} &nbsp;|&nbsp; <b>• 산출근거 항목:</b> {item['산출근거명']}</p>
-        <p><b>• 산출근거 수식:</b> <span class="formula-tag">{item['산출근거식']}</span></p>
-        <p style="margin-bottom:0;"><b>• 예산 반영액:</b> <span style="font-size:18px; font-weight:700; color:#0f766e;">{budget_num:,.0f} 천원</span> ({budget_num/100000:,.2f} 억 원)</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # [탭 1] 부서별 예산 집계 Top 10
+    with tab_dept:
+        dept_group = search_df.groupby('부서명').agg(
+            예산합계_천원=('예산액_num', 'sum'),
+            항목수=('예산액_num', 'count')
+        ).reset_index()
+        dept_group['예산합계_억원'] = (dept_group['예산합계_천원'] / 100000.0).round(2)
+        dept_group = dept_group.sort_values(by='예산합계_천원', ascending=False)
+        
+        col_d1, col_d2 = st.columns([1, 1])
+        with col_d1:
+            st.markdown("##### 🏢 부서별 예산 규모 순위 (상위 10개 부서)")
+            chart_df = dept_group.head(10).set_index('부서명')[['예산합계_억원']]
+            st.bar_chart(chart_df)
+            
+        with col_d2:
+            st.markdown("##### 📋 부서별 예산 집계 요약표")
+            dept_display = dept_group.head(10).copy()
+            dept_display.columns = ['부서명', '예산합계(천원)', '건수', '예산합계(억원)']
+            st.dataframe(
+                dept_display[['부서명', '예산합계(억원)', '예산합계(천원)', '건수']],
+                use_container_width=True,
+                height=300,
+                column_config={
+                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d"),
+                    "예산합계(억원)": st.column_config.NumberColumn(format="%.2f 억원")
+                }
+            )
+
+    # [탭 2] 주요 통계목별 예산 비중
+    with tab_stat:
+        stat_group = search_df.groupby('통계목명').agg(
+            예산합계_천원=('예산액_num', 'sum'),
+            항목수=('예산액_num', 'count')
+        ).reset_index()
+        stat_group['예산합계_억원'] = (stat_group['예산합계_천원'] / 100000.0).round(2)
+        stat_group = stat_group.sort_values(by='예산합계_천원', ascending=False)
+        
+        col_s1, col_s2 = st.columns([1, 1])
+        with col_s1:
+            st.markdown("##### 🏷️ 통계목별 예산 규모 순위 (상위 10개 비목)")
+            stat_chart_df = stat_group.head(10).set_index('통계목명')[['예산합계_억원']]
+            st.bar_chart(stat_chart_df)
+            
+        with col_s2:
+            st.markdown("##### 📋 통계목별 예산 집계 요약표")
+            stat_display = stat_group.head(10).copy()
+            stat_display.columns = ['통계목명', '예산합계(천원)', '건수', '예산합계(억원)']
+            st.dataframe(
+                stat_display[['통계목명', '예산합계(억원)', '예산합계(천원)', '건수']],
+                use_container_width=True,
+                height=300,
+                column_config={
+                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d"),
+                    "예산합계(억원)": st.column_config.NumberColumn(format="%.2f 억원")
+                }
+            )
+
+    # [탭 3] 의무/재량 지출 구조
+    with tab_type:
+        type_group = search_df.groupby('의무/재량구분').agg(
+            예산합계_천원=('예산액_num', 'sum'),
+            항목수=('예산액_num', 'count')
+        ).reset_index()
+        type_group['예산합계_억원'] = (type_group['예산합계_천원'] / 100000.0).round(2)
+        
+        col_t1, col_t2 = st.columns([1, 1])
+        with col_t1:
+            st.markdown("##### ⚖️ 의무 vs 재량 지출 예산 비중 (억원)")
+            type_chart_df = type_group.set_index('의무/재량구분')[['예산합계_억원']]
+            st.bar_chart(type_chart_df)
+            
+        with col_t2:
+            st.markdown("##### 📋 지출 구조 요약표")
+            type_group.columns = ['지출구분', '예산합계(천원)', '건수', '예산합계(억원)']
+            st.dataframe(
+                type_group[['지출구분', '예산합계(억원)', '예산합계(천원)', '건수']],
+                use_container_width=True,
+                height=220,
+                column_config={
+                    "예산합계(천원)": st.column_config.NumberColumn(format="%,d"),
+                    "예산합계(억원)": st.column_config.NumberColumn(format="%.2f 억원")
+                }
+            )
