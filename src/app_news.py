@@ -216,7 +216,7 @@ def deduplicate_news_items(items):
     return clusters
 
 # ==========================================
-# 3. 네이버 및 전용 소셜 미디어(유튜브, 인스타그램, 쓰레드) 수집 엔진
+# 3. 네이버 및 소셜 수집 엔진
 # ==========================================
 @st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
@@ -239,7 +239,7 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
         pass
     return []
 
-# 📺 3-1. 유튜브 전용 실시간 영상 및 댓글 수집 엔진
+# 📺 3-1. 유튜브 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_youtube_data(query, max_results=10):
     items = []
@@ -300,16 +300,12 @@ def fetch_youtube_data(query, max_results=10):
         
     return items
 
-# 📸 3-2. 인스타그램 & 🧵 쓰레드 개별 실시간 게시글 전용 수집 엔진
+# 📸 3-2. 인스타그램 & 🧵 쓰레드 개별 포스트 수집 엔진
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_pure_sns_posts(platform_name, query, count=6):
-    """
-    네이버 카페/블로그를 완전히 배제하고, 인스타그램 및 쓰레드의 실제 개별 게시글 피드만 정밀 수집합니다.
-    """
     items = []
     platform_key = platform_name.lower()
     
-    # 순수 SNS 개별 포스트 실시간 수집 파이프라인
     url = f"https://news.google.com/rss/search?q={urllib.parse.quote(query + ' ' + platform_name)}&hl=ko&gl=KR&ceid=KR:ko"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     
@@ -326,7 +322,7 @@ def fetch_pure_sns_posts(platform_name, query, count=6):
                 clean_t = re.sub(r' - .*?$', '', t)
                 items.append({
                     "title": f"[{platform_name}] {clean_t}",
-                    "description": f"{platform_name}에서 키워드 '{query}' 관련하여 시민들이 공유한 실시간 소셜 피드 게시글입니다.",
+                    "description": f"{platform_name}에서 키워드 '{query}' 관련하여 공유된 시정 동향 소셜 피드입니다.",
                     "link": l,
                     "date": d,
                     "source_type": platform_key
@@ -334,21 +330,20 @@ def fetch_pure_sns_posts(platform_name, query, count=6):
     except Exception:
         pass
         
-    # 기본 해시태그/검색 딥링크 보강
     if not items:
         clean_tag = query.replace(" ", "")
         if platform_key == "instagram":
             items.append({
-                "title": f"📸 #{clean_tag} 인스타그램 실시간 해시태그 모니터링 피드",
-                "description": f"인스타그램에서 #{clean_tag}, #용인특례시, #처인구 해시태그로 공유된 시민들의 포토 피드입니다.",
+                "title": f"📸 #{clean_tag} 인스타그램 모니터링 피드",
+                "description": f"인스타그램에서 #{clean_tag}, #용인특례시, #처인구 해시태그 게시글 피드입니다.",
                 "link": f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_tag)}/",
                 "date": "실시간 피드",
                 "source_type": "instagram"
             })
         else:
             items.append({
-                "title": f"🧵 용인시 '{query}' 쓰레드(Threads) 실시간 시민 여론 피드",
-                "description": f"쓰레드(Threads)에서 '{query}' 관련하여 시민들이 나눈 텍스트 여론 포스트입니다.",
+                "title": f"🧵 용인시 '{query}' 쓰레드(Threads) 시민 여론 피드",
+                "description": f"쓰레드(Threads)에서 '{query}' 관련 시민 여론 포스트입니다.",
                 "link": f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}",
                 "date": "실시간 피드",
                 "source_type": "threads"
@@ -405,7 +400,7 @@ def analyze_content_with_factchat(title, description):
         return {"summary": f"요약 분석 중 오류 발생: {e}", "is_negative": False, "point": ""}
 
 # ==========================================
-# 5. 화면 UI 렌더링 (사이드바 / 메인 4대 탭)
+# 5. 화면 UI 렌더링
 # ==========================================
 
 # --- [사이드바 통제실] ---
@@ -443,13 +438,13 @@ with st.sidebar:
 # --- [메인 데이터 패널] ---
 if selected_kw:
     st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
-    st.caption(f"기준: {sort_option.split(' ')[0]} | 언론 보도, 블로그/카페, 순수 인스타/쓰레드 & 유튜브 독립 모니터링")
+    st.caption(f"기준: {sort_option.split(' ')[0]}")
             
     tab_news, tab_comm, tab_sns, tab_youtube = st.tabs([
         "📡 대표 언론 보도", 
         "💬 네이버 블로그/카페",
-        "📸 인스타그램 & 쓰레드 (순수 SNS)",
-        "📺 유튜브 (영상 & 댓글)"
+        "📸 인스타그램 & 쓰레드",
+        "📺 유튜브"
     ])
 
     def render_article_card(item_info, unique_key, source_type="news"):
@@ -472,11 +467,11 @@ if selected_kw:
         elif source_type == "blog":
             tags_html += "<span class='tag-badge tag-blog'>📌 네이버 블로그</span>"
         elif source_type == "instagram":
-            tags_html += "<span class='tag-badge tag-insta'>📸 인스타그램 피드</span>"
+            tags_html += "<span class='tag-badge tag-insta'>📸 인스타그램</span>"
         elif source_type == "threads":
-            tags_html += "<span class='tag-badge tag-threads'>🧵 쓰레드(Threads) 피드</span>"
+            tags_html += "<span class='tag-badge tag-threads'>🧵 쓰레드(Threads)</span>"
         elif source_type == "youtube":
-            tags_html += "<span class='tag-badge tag-youtube'>📺 유튜브 시정 영상</span>"
+            tags_html += "<span class='tag-badge tag-youtube'>📺 유튜브</span>"
         else:
             cafe_name = item.get('cafename', '지역 커뮤니티')
             tags_html += f"<span class='tag-badge tag-cafe'>👥 네이버 카페 ({cafe_name})</span>"
@@ -545,28 +540,22 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
 
-    # [탭 3] 순수 인스타그램 & 쓰레드 전용 SNS 탭
+    # [탭 3] 인스타그램 & 쓰레드
     with tab_sns:
-        st.markdown("### 📸 인스타그램 & 🧵 쓰레드(Threads) 실시간 개별 포스트")
-        st.caption("네이버 카페/블로그는 제거되었으며, 순수 소셜 미디어 게시글 피드만 렌더링됩니다.")
-        
         col_insta, col_threads = st.columns(2)
         
         with col_insta:
-            st.markdown("#### 📸 인스타그램 (Instagram) 포스트")
             insta_posts = fetch_pure_sns_posts("Instagram", selected_kw, count=display_count)
             for i, p in enumerate(insta_posts):
                 render_article_card(p, unique_key=f"insta_{selected_kw}_{i}", source_type="instagram")
                 
         with col_threads:
-            st.markdown("#### 🧵 쓰레드 (Threads) 포스트")
             threads_posts = fetch_pure_sns_posts("Threads", selected_kw, count=display_count)
             for i, p in enumerate(threads_posts):
                 render_article_card(p, unique_key=f"threads_{selected_kw}_{i}", source_type="threads")
 
-    # [탭 4] 유튜브 (영상 & 댓글 탭)
+    # [탭 4] 유튜브
     with tab_youtube:
-        st.markdown("### 📺 유튜브 용인시 시정 영상 및 시민 실시간 댓글")
         yt_items = fetch_youtube_data(selected_kw, display_count)
         if yt_items:
             for i, yt_item in enumerate(yt_items):
