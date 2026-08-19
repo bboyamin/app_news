@@ -200,7 +200,7 @@ def normalize_item_name(name):
     s_clean = s.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 @st.cache_data(show_spinner=False)
-def load_and_prepare_year_data(year, cache_version="v2.8"):
+def load_and_prepare_year_data(year, cache_version="v2.9"):
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
@@ -298,12 +298,12 @@ def load_and_prepare_year_data(year, cache_version="v2.8"):
                 if not exact_m.empty:
                     superseded_indices.update(exact_m.index)
                 elif '경정' in f or '성립전' in f or '성립전' in name or '간주' in f or '간주' in name:
-                    if len(chu_items) == 1 and len(prev_items) == 1:
+                    if len(chu_items) == 1 and len(prev_items) == 1 and ('경정' in f or f in ['-', '']):
                         superseded_indices.update(prev_items.index)
                     else:
                         for p_idx, p_row in prev_items.iterrows():
                             p_norm = p_row['norm_name']
-                            if ('출전' in c_norm and '출전' in p_norm) or ('워크숍' in c_norm and '워크숍' in p_norm) or ('시설' in c_norm and '시설' in p_norm) or ('지역화폐' in c_norm and '지역화폐' in p_norm) or ('복지' in c_norm and '복지' in p_norm) or ('인건비' in c_norm and '인건비' in p_norm) or ('지원' in c_norm and '지원' in p_norm):
+                            if ('출전' in c_norm and '출전' in p_norm) or ('워크숍' in c_norm and '워크숍' in p_norm) or ('시설관리위탁' in c_norm and '자산및물품' in p_norm) or ('지역화폐' in c_norm and '지역화폐' in p_norm):
                                 superseded_indices.add(p_idx)
 
     for idx in superseded_indices:
