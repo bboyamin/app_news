@@ -196,12 +196,11 @@ def get_budget_type_sort_key(t_str):
 
 def normalize_item_name(name):
     s = re.sub(r'^[○Ο●◎◆■□οo\-▪ㆍ･\s]+', '', str(name).strip())
-    s_no_paren = re.sub(r'\(.*?\)|\[.*?\]', '', s).strip()
-    s_clean = s_no_paren.replace(" ", "")
+    s_clean = s.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 
 @st.cache_data(show_spinner=False)
-def load_and_prepare_year_data(year, cache_version="v2.2"):
+def load_and_prepare_year_data(year, cache_version="v2.3"):
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
