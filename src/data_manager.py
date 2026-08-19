@@ -12,20 +12,9 @@ TEMP_DOC_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 _MEMORY_CACHE = {}
 
 def ensure_data_dir():
-    """데이터 디렉토리 생성 및 초기 2026년 데이터 세팅"""
+    """데이터 디렉토리 생성"""
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
-    
-    file_2026 = os.path.join(DATA_DIR, "budget_2026.csv")
-    if not os.path.exists(file_2026) and os.path.exists(TEMP_DOC_PATH):
-        try:
-            df_raw = read_csv_robust(TEMP_DOC_PATH)
-            df_clean = clean_budget_dataframe(df_raw)
-            df_clean['회계연도'] = 2026
-            df_clean.to_csv(file_2026, index=False, encoding="utf-8-sig")
-            _MEMORY_CACHE['2026'] = df_clean
-        except Exception as e:
-            print(f"Error seeding 2026 budget data: {e}")
 
 def read_csv_robust(filepath_or_buffer):
     """모든 한글 CSV 인코딩(UTF-8-SIG, CP949, EUC-KR, UTF-8, ANSI) 무적 수집 파서"""
