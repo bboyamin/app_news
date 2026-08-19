@@ -177,8 +177,9 @@ def normalize_item_name(name):
 @st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
     """
+    0단계: 상위 대항목 헤더 바인딩
     1단계: Multi-level 3계층(대항목/중항목/소항목) 소계 헤더 자동 차감 엔진
-    2단계: 서로 다른 예산구분(본예산 vs 추경) 간에만 최신 버전 경정 대체 마킹
+    2단계: 상위 부모 헤더 스코프 지정 정규화 경정 대체 정산
     """
     df = data_manager.load_year_data(year)
     if df.empty:
@@ -186,6 +187,22 @@ def load_and_prepare_year_data(year):
 
     df_copy = df.copy()
     df_copy['정산 상태'] = '✅ 정산 포함'
+    df_copy['parent_header'] = ''
+
+    # 0단계: 각 행별 상위 부모 헤더(Big Circle 명칭) 바인딩
+    for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
+        records = group.to_dict('records')
+        orig_indices = group.index.tolist()
+        n = len(records)
+        curr_parent = ''
+        for i in range(n):
+            c_name = records[i]['산출근거명']
+            lvl = get_symbol_level(c_name)
+            if lvl == 1:
+                curr_parent = c_name
+            df_copy.loc[orig_indices[i], 'parent_header'] = curr_parent
+
+    df_copy['parent_norm'] = df_copy['parent_header'].apply(normalize_item_name)
 
     # 1단계: Multi-level 계층 구조 소계 중복 감지
     circle_excluded_indices = set()
@@ -225,12 +242,12 @@ def load_and_prepare_year_data(year):
     for idx in circle_excluded_indices:
         df_copy.loc[idx, '정산 상태'] = '🔻 소계 중복 제외'
 
-    # 2단계: 서로 다른 예산구분 간에만 최신버전 대체!
+    # 2단계: 부모 헤더 스코프 기반 정규화 경정 대체 정산
     non_circle_df = df_copy[df_copy['정산 상태'] == '✅ 정산 포함'].copy()
     non_circle_df['norm_name'] = non_circle_df['산출근거명'].apply(normalize_item_name)
     non_circle_df['sort_key'] = non_circle_df['예산구분'].apply(get_budget_type_sort_key)
 
-    group_cols = ['부서명', '세부사업명', '통계목명', 'norm_name']
+    group_cols = ['부서명', '세부사업명', '통계목명', 'parent_norm', 'norm_name']
     group_max_sort = non_circle_df.groupby(group_cols)['sort_key'].transform('max')
 
     superseded_mask = (non_circle_df['sort_key'] < group_max_sort)
