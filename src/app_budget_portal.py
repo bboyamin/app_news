@@ -91,44 +91,44 @@ st.markdown("""
         margin-bottom: 16px !important;
     }
 
-    /* 🌟 대형 텍스트 입력 박스 커스텀 CSS */
+    /* 🌟 시선강탈 초대형 텍스트 입력 박스 커스텀 CSS (68px 높이 & 20px 대형 폰트) */
     div[data-testid="stTextInput"] {
-        margin-top: 6px;
-        margin-bottom: 4px;
+        margin-top: 8px;
+        margin-bottom: 6px;
     }
 
     div[data-baseweb="input"] {
-        border-radius: 12px !important;
-        border: 2px solid #cbd5e1 !important;
+        border-radius: 14px !important;
+        border: 3.5px solid #2563eb !important;
         background-color: #ffffff !important;
-        padding: 6px 14px !important;
-        height: 56px !important;
-        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04) !important;
+        padding: 8px 18px !important;
+        height: 68px !important;
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.16) !important;
         transition: all 0.25s ease-in-out !important;
     }
     
     div[data-baseweb="input"]:hover {
-        border-color: #2563eb !important;
-        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.15) !important;
+        border-color: #1d4ed8 !important;
+        box-shadow: 0 8px 25px rgba(29, 78, 216, 0.22) !important;
     }
     
     div[data-baseweb="input"]:focus-within {
         border-color: #1d4ed8 !important;
         background-color: #ffffff !important;
-        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.22), 0 8px 22px rgba(37, 99, 235, 0.18) !important;
+        box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.3), 0 10px 30px rgba(37, 99, 235, 0.25) !important;
     }
     
     div[data-baseweb="input"] input {
-        font-size: 17.5px !important;
-        font-weight: 700 !important;
+        font-size: 20px !important;
+        font-weight: 800 !important;
         color: #0f172a !important;
-        padding-left: 8px !important;
+        padding-left: 10px !important;
     }
 
     div[data-baseweb="input"] input::placeholder {
-        color: #64748b !important;
-        font-size: 15px !important;
-        font-weight: 500 !important;
+        color: #475569 !important;
+        font-size: 17.5px !important;
+        font-weight: 600 !important;
     }
 
     /* 산출근거 수식 카드 */
@@ -262,13 +262,13 @@ all_budget_types = ["전체"] + sorted_budget_types
 col_f1, col_f2, col_f3 = st.columns(3)
 
 with col_f1:
-    sel_acct = st.selectbox("🏛️ 회계구분 선택 (예산 규모순)", all_accts, index=0)
+    sel_acct = st.selectbox("🏛️ 회계구분 선택", all_accts, index=0)
 
 with col_f2:
-    sel_dept = st.selectbox("🏢 소관 부서 선택 (CSV 원본 부서 순서)", all_depts, index=0)
+    sel_dept = st.selectbox("🏢 소관 부서 선택", all_depts, index=0)
 
 with col_f3:
-    sel_budget_type = st.selectbox("📑 예산구분 선택 (확정 순서 정렬: 본예산 ➔ 추경1회...)", all_budget_types, index=0)
+    sel_budget_type = st.selectbox("📑 예산구분 선택", all_budget_types, index=0)
 
 # 필터 적용
 filtered_df = df_year.copy()
@@ -295,7 +295,7 @@ with st.container(border=True):
     
     search_keyword = st.text_input(
         "검색어 입력", 
-        placeholder="👉 원하시는 검색어를 입력하세요 (예: 정보화 교육, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)",
+        placeholder="원하시는 검색어를 입력하세요 (예: 정보화 교육, 주차장, 수당, 마스크, 연수, 용역, 자치행정과...)",
         label_visibility="collapsed"
     )
 
