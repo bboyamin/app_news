@@ -23,7 +23,7 @@ FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 KEYWORD_FILE = "keywords_db.json"
 
-# 전역 CSS 디자인 인젝션
+# 전역 CSS 디자인 인젝션 (클린 프리미엄)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap');
@@ -33,26 +33,15 @@ st.markdown("""
     }
     
     .block-container {
-        padding-top: 2.5rem !important;
+        padding-top: 2.8rem !important;
         padding-bottom: 5rem !important;
-    }
-    
-    .version-banner {
-        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-        border: 1px solid #93c5fd;
-        border-radius: 12px;
-        padding: 14px 20px;
-        margin-bottom: 22px;
-        color: #1e40af;
-        font-size: 14px;
-        line-height: 1.6;
     }
 
     .report-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 14px;
-        padding: 22px 26px;
+        padding: 24px 28px;
         margin-bottom: 18px;
         box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
         transition: all 0.2s ease-in-out;
@@ -80,8 +69,8 @@ st.markdown("""
         background-color: #f8fafc;
         border: 1px solid #cbd5e1;
         border-radius: 12px;
-        padding: 18px;
-        margin-top: 12px;
+        padding: 18px 22px;
+        margin-top: 14px;
         line-height: 1.75;
         white-space: pre-wrap !important;
     }
@@ -89,8 +78,8 @@ st.markdown("""
         background-color: #fff5f5;
         border: 1px solid #fecaca;
         border-radius: 12px;
-        padding: 18px;
-        margin-top: 12px;
+        padding: 18px 22px;
+        margin-top: 14px;
         line-height: 1.75;
         white-space: pre-wrap !important;
     }
@@ -289,31 +278,12 @@ def analyze_content_with_factchat(title, description):
         return {"summary": f"요약 분석 중 오류 발생: {e}", "is_negative": False, "point": ""}
 
 # ==========================================
-# 5. 화면 UI 렌더링
+# 5. 화면 UI 렌더링 (클린 프로덕션 레이아웃)
 # ==========================================
-
-# 🌟 상단 최상위 고도화 안내 배너 및 글로벌 새로고침 버튼 (무조건 상시 노출)
-col_top_h, col_top_b = st.columns([0.72, 0.28])
-with col_top_h:
-    st.markdown("""
-    <div class="version-banner">
-        <b>✨ [최신 고도화 완료 모드 가동 중]</b><br>
-        유사 중복 보도자료 100% 클러스터링 제거 & 주요 언론사 공신력 1위 대표 보도만 엄선 렌더링됩니다.
-    </div>
-    """, unsafe_allow_html=True)
-with col_top_b:
-    if st.button("🔄 실시간 데이터 강제 새로고침", use_container_width=True, key="top_global_refresh_btn"):
-        st.cache_data.clear()
-        st.rerun()
 
 # --- [사이드바 통제실] ---
 with st.sidebar:
     st.header("⚙️ 모니터링 설정")
-    if st.button("🔄 캐시 비우고 전체 재조회", use_container_width=True, key="sidebar_refresh_btn"):
-        st.cache_data.clear()
-        st.rerun()
-        
-    st.divider()
     
     st.subheader("1. 정렬 및 수집 기준")
     sort_option = st.radio("데이터 정렬 방식", ["정확도/인기순 (sim)", "최신순 (date)"])
@@ -346,9 +316,9 @@ with st.sidebar:
 # --- [메인 데이터 패널] ---
 if selected_kw:
     st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
-    st.caption(f"기준: {sort_option.split(' ')[0]} | 유사 중복 기사 100% 클러스터링 제거 & 공신력 1위 대표 보도 엄선")
+    st.caption(f"기준: {sort_option.split(' ')[0]} | 중복 보도자료 클러스터링 제거 & 공신력 대표 보도 엄선")
             
-    tab_news, tab_comm = st.tabs(["📡 대표 언론 보도 (중복제거 100% 적용)", "💬 지역 여론 (블로그/카페)"])
+    tab_news, tab_comm = st.tabs(["📡 대표 언론 보도", "💬 지역 여론 (블로그/카페)"])
 
     def render_article_card(item_info, unique_key, source_type="news"):
         if isinstance(item_info, dict) and "representative" in item_info:
