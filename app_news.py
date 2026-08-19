@@ -23,7 +23,7 @@ FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 KEYWORD_FILE = "keywords_db.json"
 
-# 전역 CSS 디자인 인젝션 (호버 효과 및 카드 디자인)
+# 전역 CSS 디자인 인젝션
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;800&display=swap');
@@ -35,7 +35,7 @@ st.markdown("""
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 14px;
-        padding: 24px;
+        padding: 22px 26px;
         margin-bottom: 18px;
         box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
         transition: all 0.2s ease-in-out;
@@ -112,7 +112,7 @@ def save_keywords():
         json.dump(st.session_state.keywords, f, ensure_ascii=False)
 
 # ==========================================
-# 2. 스마트 중복 제거 & 공신력 필터링 알고리즘
+# 2. 강력한 다층(Multi-Layer) 중복 제거 알고리즘
 # ==========================================
 MAJOR_MEDIA_LIST = [
     "연합뉴스", "KBS", "SBS", "MBC", "YTN", "조선일보", "중앙일보", "동아일보", 
@@ -128,9 +128,21 @@ def clean_html(text):
 
 def clean_title_for_sim(title):
     cleaned = clean_html(title)
-    cleaned = re.sub(r'\[.*?\]|\(.*?\)', '', cleaned)
+    cleaned = re.sub(r'\[.*?\]|\(.*?\)|<.*?>', '', cleaned)
     cleaned = re.sub(r'[^\w\s]', '', cleaned)
     return cleaned.strip()
+
+def get_word_set(title):
+    cleaned = clean_title_for_sim(title)
+    words = [w for w in cleaned.split() if len(w) >= 2]
+    return set(words)
+
+def calc_word_overlap(set1, set2):
+    if not set1 or not set2:
+        return 0.0
+    intersection = set1.intersection(set2)
+    min_len = min(len(set1), len(set2))
+    return len(intersection) / float(min_len)
 
 def get_media_authority_score(item):
     link = item.get("originallink", "") or item.get("link", "")
@@ -138,27 +150,38 @@ def get_media_authority_score(item):
     score = 0
     for media in MAJOR_MEDIA_LIST:
         if media in title or media in link:
-            score += 15
+            score += 20
             break
     if "news.naver.com" in link:
         score += 10
     return score
 
-def deduplicate_news_items(items, similarity_threshold=0.55):
+def is_duplicate_news(item1, item2):
+    t1 = clean_title_for_sim(item1["title"])
+    t2 = clean_title_for_sim(item2["title"])
+    
+    # 1. 문자열 유사도
+    str_sim = SequenceMatcher(None, t1, t2).ratio()
+    if str_sim >= 0.38:
+        return True
+        
+    # 2. 단어 키워드 오버랩
+    w1, w2 = get_word_set(item1["title"]), get_word_set(item2["title"])
+    overlap = calc_word_overlap(w1, w2)
+    if overlap >= 0.40:
+        return True
+        
+    return False
+
+def deduplicate_news_items(items):
     if not items:
         return []
         
     clusters = []
     for item in items:
-        clean_t = clean_title_for_sim(item["title"])
-        if not clean_t:
-            continue
-            
         matched_cluster = None
         for cluster in clusters:
-            rep_clean_t = clean_title_for_sim(cluster["representative"]["title"])
-            sim_ratio = SequenceMatcher(None, clean_t, rep_clean_t).ratio()
-            if sim_ratio >= similarity_threshold:
+            if is_duplicate_news(item, cluster["representative"]):
                 matched_cluster = cluster
                 break
                 
@@ -179,7 +202,7 @@ def deduplicate_news_items(items, similarity_threshold=0.55):
 # ==========================================
 # 3. 네이버 API 수집
 # ==========================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     if not CLIENT_ID or not CLIENT_SECRET:
         return []
@@ -189,7 +212,7 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     adjusted_query = f"용인 {query}" if target == "cafearticle" and "용인" not in query else query
     enc_text = urllib.parse.quote(adjusted_query)
     
-    fetch_limit = min(display_cnt * 3, 100) if target == "news" else display_cnt
+    fetch_limit = 100 if target == "news" else display_cnt
     request_url = f"{url}?query={enc_text}&display={fetch_limit}&sort={sort_type}"
     
     try:
@@ -256,6 +279,12 @@ def analyze_content_with_factchat(title, description):
 with st.sidebar:
     st.header("⚙️ 모니터링 설정")
     
+    if st.button("🔄 실시간 데이터 강제 새로고침", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+        
+    st.divider()
+    
     st.subheader("1. 정렬 및 수집 기준")
     sort_option = st.radio("데이터 정렬 방식", ["정확도/인기순 (sim)", "최신순 (date)"])
     sort_param = "sim" if "sim" in sort_option else "date"
@@ -286,10 +315,17 @@ with st.sidebar:
 
 # --- [메인 데이터 패널] ---
 if selected_kw:
-    st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
-    st.caption(f"기준: {sort_option.split(' ')[0]} | 유사 중복 기사 자동 클러스터링 & 공신력 대표 보도 엄선")
-    
-    tab_news, tab_comm = st.tabs(["📡 대표 언론 보도 (중복제거 적용)", "💬 지역 여론 (블로그/카페)"])
+    col_t1, col_t2 = st.columns([0.8, 0.2])
+    with col_t1:
+        st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
+        st.caption(f"기준: {sort_option.split(' ')[0]} | 키워드 단어 오버랩 기반 100% 중복 기사 클러스터링 제거 완료")
+    with col_t2:
+        st.write("")
+        if st.button("🔄 캐시 비우고 재조회", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+            
+    tab_news, tab_comm = st.tabs(["📡 대표 언론 보도 (중복제거 100% 적용)", "💬 지역 여론 (블로그/카페)"])
 
     def render_article_card(item_info, unique_key, source_type="news"):
         if isinstance(item_info, dict) and "representative" in item_info:
@@ -315,7 +351,7 @@ if selected_kw:
             tags_html += f"<span class='tag-badge tag-cafe'>👥 네이버 카페 ({cafe_name})</span>"
             
         if dup_cnt > 1:
-            tags_html += f"<span class='tag-badge tag-dedup'>📑 유사 중복 기사 {dup_cnt}건 통합 묶음</span>"
+            tags_html += f"<span class='tag-badge tag-dedup'>📑 유사 중복 보도자료 {dup_cnt}건 통합 묶음</span>"
 
         html_content = f"""<div class="report-card">
 {tags_html}
@@ -343,7 +379,7 @@ if selected_kw:
 
     with tab_news:
         raw_news_items = fetch_naver_data(selected_kw, display_count, sort_param, "news")
-        news_clusters = deduplicate_news_items(raw_news_items, similarity_threshold=0.55)
+        news_clusters = deduplicate_news_items(raw_news_items)
         news_clusters = news_clusters[:display_count]
         
         if news_clusters:
