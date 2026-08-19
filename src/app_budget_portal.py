@@ -5,7 +5,13 @@ import time
 import pandas as pd
 import numpy as np
 import streamlit as st
-import plotly.graph_objects as go
+
+# Plotly 안전 임포트 (Streamlit Cloud 환경 대응)
+try:
+    import plotly.graph_objects as go
+    HAS_PLOTLY = True
+except ImportError:
+    HAS_PLOTLY = False
 
 # 데이터 관리자 모듈 임포트
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -270,36 +276,40 @@ def load_and_prepare_year_data(year):
 
     return df_copy
 
-def create_top_highlight_bar_chart(df_data, x_col, y_col, y_label="예산액 (억 원)"):
+def render_top_highlight_bar_chart(df_data, x_col, y_col, y_label="예산액 (억 원)"):
     """
-    상위 1위, 2위, 3위 항목에 각각 독자적인 프리미엄 강조 색상을 부여하는 차트 함수
+    Plotly 안전 임포트 및 상위 1위, 2위, 3위 강조 색상 표출 렌더러
     1위: #2563eb (로얄 블루)
     2위: #0d9488 (티얼 민트)
     3위: #ea580c (노을 오렌지)
     4위 이하: #cbd5e1 (은은한 슬레이트 그레이)
     """
-    palette = ['#2563eb', '#0d9488', '#ea580c'] + ['#cbd5e1'] * max(0, len(df_data) - 3)
-    bar_colors = palette[:len(df_data)]
+    if HAS_PLOTLY:
+        palette = ['#2563eb', '#0d9488', '#ea580c'] + ['#cbd5e1'] * max(0, len(df_data) - 3)
+        bar_colors = palette[:len(df_data)]
 
-    fig = go.Figure(data=[
-        go.Bar(
-            x=df_data[x_col],
-            y=df_data[y_col],
-            marker_color=bar_colors,
-            text=[f'{val:,.2f}억' for val in df_data[y_col]],
-            textposition='auto',
-            hovertemplate=f"<b>%{{x}}</b><br>{y_label}: %{{y:,.2f}}억 원<extra></extra>"
+        fig = go.Figure(data=[
+            go.Bar(
+                x=df_data[x_col],
+                y=df_data[y_col],
+                marker_color=bar_colors,
+                text=[f'{val:,.2f}억' for val in df_data[y_col]],
+                textposition='auto',
+                hovertemplate=f"<b>%{{x}}</b><br>{y_label}: %{{y:,.2f}}억 원<extra></extra>"
+            )
+        ])
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=25, b=10),
+            height=320,
+            xaxis_title="",
+            yaxis_title=y_label,
+            template="plotly_white",
+            font=dict(family="Noto Sans KR, sans-serif", size=12)
         )
-    ])
-    fig.update_layout(
-        margin=dict(l=10, r=10, t=25, b=10),
-        height=320,
-        xaxis_title="",
-        yaxis_title=y_label,
-        template="plotly_white",
-        font=dict(family="Noto Sans KR, sans-serif", size=12)
-    )
-    return fig
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        chart_df = df_data.head(10).set_index(x_col)[[y_col]]
+        st.bar_chart(chart_df)
 
 # ==========================================
 # 2. 사이드바 - 회계연도 선택 & CSV 업로드 관리
@@ -564,8 +574,7 @@ if (sel_budget_type in ["전체", "본예산"]) and not search_df.empty:
         col_d1, col_d2 = st.columns([1, 1])
         with col_d1:
             st.markdown("##### 🏢 부서별 정산 예산 규모 순위 (상위 10개 부서)")
-            fig_dept = create_top_highlight_bar_chart(dept_group.head(10), '부서명', '예산합계_억원')
-            st.plotly_chart(fig_dept, use_container_width=True)
+            render_top_highlight_bar_chart(dept_group.head(10), '부서명', '예산합계_억원')
             
         with col_d2:
             st.markdown("##### 📋 부서별 정산 예산 요약표")
@@ -592,8 +601,7 @@ if (sel_budget_type in ["전체", "본예산"]) and not search_df.empty:
         col_s1, col_s2 = st.columns([1, 1])
         with col_s1:
             st.markdown("##### 🏷️ 통계목별 정산 예산 규모 순위 (상위 10개 비목)")
-            fig_stat = create_top_highlight_bar_chart(stat_group.head(10), '통계목명', '예산합계_억원')
-            st.plotly_chart(fig_stat, use_container_width=True)
+            render_top_highlight_bar_chart(stat_group.head(10), '통계목명', '예산합계_억원')
             
         with col_s2:
             st.markdown("##### 📋 통계목별 정산 예산 요약표")
@@ -619,8 +627,7 @@ if (sel_budget_type in ["전체", "본예산"]) and not search_df.empty:
         col_t1, col_t2 = st.columns([1, 1])
         with col_t1:
             st.markdown("##### ⚖️ 의무 vs 재량 정산 예산 비중 (억원)")
-            fig_type = create_top_highlight_bar_chart(type_group, '의무/재량구분', '예산합계_억원')
-            st.plotly_chart(fig_type, use_container_width=True)
+            render_top_highlight_bar_chart(type_group, '의무/재량구분', '예산합계_억원')
             
         with col_t2:
             st.markdown("##### 📋 지출 구조 정산 요약표")
