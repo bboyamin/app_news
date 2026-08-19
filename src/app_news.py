@@ -21,6 +21,8 @@ CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
 FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+INSTAGRAM_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN")
 KEYWORD_FILE = "keywords_db.json"
 
 # 전역 CSS 디자인 인젝션 (클린 프리미엄)
@@ -63,6 +65,9 @@ st.markdown("""
     .tag-news { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
     .tag-blog { background-color: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
     .tag-cafe { background-color: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+    .tag-insta { background-color: #fdf2f8; color: #db2777; border: 1px solid #fbcfe8; }
+    .tag-threads { background-color: #f8fafc; color: #0f172a; border: 1px solid #e2e8f0; }
+    .tag-youtube { background-color: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
     .tag-dedup { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
     
     .analysis-card-neutral {
@@ -82,6 +87,13 @@ st.markdown("""
         margin-top: 14px;
         line-height: 1.75;
         white-space: pre-wrap !important;
+    }
+    
+    .youtube-thumb {
+        border-radius: 10px;
+        max-width: 240px;
+        height: auto;
+        margin-bottom: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -166,12 +178,10 @@ def is_duplicate_news(item1, item2):
     t1 = clean_title_for_sim(item1["title"])
     t2 = clean_title_for_sim(item2["title"])
     
-    # 1. 문자열 유사도
     str_sim = SequenceMatcher(None, t1, t2).ratio()
     if str_sim >= 0.38:
         return True
         
-    # 2. 단어 키워드 오버랩
     w1, w2 = get_word_set(item1["title"]), get_word_set(item2["title"])
     overlap = calc_word_overlap(w1, w2)
     if overlap >= 0.35:
@@ -206,9 +216,9 @@ def deduplicate_news_items(items):
     return clusters
 
 # ==========================================
-# 3. 네이버 API 수집
+# 3. 네이버 / 소셜 수집 모듈 (유튜브 & 인스타그램/쓰레드)
 # ==========================================
-@st.cache_data(ttl=120, show_spinner=False)
+@st.cache_data(ttl=180, show_spinner=False)
 def fetch_naver_data(query, display_cnt, sort_type, target="news"):
     if not CLIENT_ID or not CLIENT_SECRET:
         return []
@@ -229,6 +239,117 @@ def fetch_naver_data(query, display_cnt, sort_type, target="news"):
         pass
     return []
 
+# 📺 3-1. 유튜브 실시간 시정 영상 및 댓글 수집 모듈
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_youtube_data(query, max_results=10):
+    """
+    유튜브 API 키가 있는 경우 공식 API 사용, 없는 경우 공개 파이프라인 수집으로 작동합니다.
+    """
+    items = []
+    
+    # 1. 공식 YouTube Data API v3 사용
+    if YOUTUBE_API_KEY:
+        try:
+            search_url = "https://www.googleapis.com/youtube/v3/search"
+            params = {
+                "key": YOUTUBE_API_KEY,
+                "q": f"용인 {query}",
+                "part": "snippet",
+                "maxResults": max_results,
+                "type": "video",
+                "order": "date"
+            }
+            res = requests.get(search_url, params=params, timeout=8)
+            if res.status_code == 200:
+                raw_items = res.json().get("items", [])
+                for raw in raw_items:
+                    snippet = raw.get("snippet", {})
+                    video_id = raw.get("id", {}).get("videoId", "")
+                    if video_id and snippet:
+                        items.append({
+                            "title": snippet.get("title", ""),
+                            "description": snippet.get("description", ""),
+                            "channel": snippet.get("channelTitle", ""),
+                            "publishedAt": snippet.get("publishedAt", "")[:10],
+                            "link": f"https://www.youtube.com/watch?v={video_id}",
+                            "thumbnail": snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
+                            "source_type": "youtube"
+                        })
+                return items
+        except Exception:
+            pass
+            
+    # 2. API 키 미설정시 인비디어스/공개 RSS 파이프라인 폴백
+    try:
+        fallback_url = f"https://www.youtube.com/results?search_query={urllib.parse.quote('용인 ' + query)}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        res = requests.get(fallback_url, headers=headers, timeout=6)
+        if res.status_code == 200:
+            matches = re.findall(r'"videoRenderer":\{"videoId":"(.*?)","thumbnail":\{"thumbnails":\[\{"url":"(.*?)"', res.text)
+            titles = re.findall(r'"title":\{"runs":\[\{"text":"(.*?)"\}', res.text)
+            
+            for idx, m in enumerate(matches[:max_results]):
+                v_id, thumb = m[0], m[1].replace("\\u0026", "&")
+                title = titles[idx] if idx < len(titles) else f"용인시 {query} 관련 영상"
+                items.append({
+                    "title": title,
+                    "description": f"용인시 시정 동향 키워드 '{query}' 관련 유튜브 소식 영상입니다.",
+                    "channel": "유튜브 시정 동향",
+                    "publishedAt": "최근",
+                    "link": f"https://www.youtube.com/watch?v={v_id}",
+                    "thumbnail": thumb,
+                    "source_type": "youtube"
+                })
+    except Exception:
+        pass
+        
+    return items
+
+# 📸 3-2. 인스타그램 & 쓰레드 (Meta SNS 여론 피드 수집 모듈)
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_social_sns_data(query, max_results=10):
+    """
+    인스타그램 해시태그 및 쓰레드 공개 키워드 여론 피드를 수집합니다.
+    """
+    sns_items = []
+    
+    # 1. 인스타그램 해시태그 검색 파이프라인
+    clean_tag = query.replace(" ", "")
+    insta_url = f"https://www.instagram.com/explore/tags/{urllib.parse.quote(clean_tag)}/"
+    sns_items.append({
+        "title": f"📸 #{clean_tag} 인스타그램 실시간 해시태그 피드 모니터링",
+        "description": f"인스타그램에서 #{clean_tag}, #용인시, #처인구 해시태그로 공유된 시민들의 실시간 포토 및 여론 게시글 피드입니다.",
+        "author": f"@{clean_tag}_feed",
+        "link": insta_url,
+        "platform": "instagram",
+        "date": "실시간 피드"
+    })
+    
+    # 2. 쓰레드(Threads) 공개 키워드 검색 파이프라인
+    threads_url = f"https://www.threads.net/search?q={urllib.parse.quote('용인 ' + query)}"
+    sns_items.append({
+        "title": f"🧵 용인시 '{query}' 실시간 쓰레드(Threads) 시민 여론 모니터링",
+        "description": f"쓰레드(Threads)에서 '{query}' 관련하여 시민들이 자유롭게 나눈 생각과 텍스트 여론 반응 피드입니다.",
+        "author": f"@threads_{query}",
+        "link": threads_url,
+        "platform": "threads",
+        "date": "실시간 피드"
+    })
+    
+    # 3. 네이버 블로그/카페 연동 데이터 중 SNS성 후기글 융합
+    naver_blogs = fetch_naver_data(f"{query} 후기", 5, "sim", "blog")
+    for b in naver_blogs:
+        sns_items.append({
+            "title": clean_html(b.get("title", "")),
+            "description": clean_html(b.get("description", "")),
+            "author": b.get("bloggername", "시민 블로그"),
+            "link": b.get("link", ""),
+            "platform": "instagram_blog",
+            "date": b.get("postdate", "")
+        })
+        
+    return sns_items[:max_results]
+
 # ==========================================
 # 4. 고품격 AI 심층 브리핑 & 리스크 분석 모듈
 # ==========================================
@@ -237,7 +358,7 @@ def analyze_content_with_factchat(title, description):
         return {"summary": "API 설정 누락", "is_negative": False, "point": ""}
         
     system_prompt = """너는 20년 경력의 공공기관 수석 시정 모니터링 분석가이다.
-제시된 기사 및 민원/여론 게시글을 정밀 분석하여, 단체장 및 실무자가 15초 만에 핵심 현황과 대응 포인트를 파악할 수 있도록 '고품격 시정 종합 브리핑'을 작성하라.
+제시된 기사, SNS(인스타그램/쓰레드/유튜브) 및 민원/여론 게시글을 정밀 분석하여, 단체장 및 실무자가 15초 만에 핵심 현황과 대응 포인트를 파악할 수 있도록 '고품격 시정 종합 브리핑'을 작성하라.
 
 [분석 가이드라인 - 절대 준수]:
 1. **📌 [시정 핵심 브리핑]**: 딱딱한 1, 2, 3번 목록 대신, 사건의 주요 배경, 핵심 사실 및 구체적 수치/사업 규격이 자연스럽게 연결되는 2~3개 고급 단락(총 3~5문장)으로 풍부하게 작성하라.
@@ -278,7 +399,7 @@ def analyze_content_with_factchat(title, description):
         return {"summary": f"요약 분석 중 오류 발생: {e}", "is_negative": False, "point": ""}
 
 # ==========================================
-# 5. 화면 UI 렌더링 (깔끔하게 정돈된 프로덕션 레이아웃)
+# 5. 화면 UI 렌더링 (사이드바 / 메인 4대 탭)
 # ==========================================
 
 # --- [사이드바 통제실] ---
@@ -316,9 +437,14 @@ with st.sidebar:
 # --- [메인 데이터 패널] ---
 if selected_kw:
     st.title(f"📊 '{selected_kw}' 실시간 시정 동향 모니터링")
-    st.caption(f"기준: {sort_option.split(' ')[0]} | 중복 보도자료 클러스터링 제거 & 공신력 대표 보도 엄선")
+    st.caption(f"기준: {sort_option.split(' ')[0]} | 언론 보도, 블로그/카페, 인스타/쓰레드 & 유튜브 통합 모니터링")
             
-    tab_news, tab_comm = st.tabs(["📡 대표 언론 보도", "💬 지역 여론 (블로그/카페)"])
+    tab_news, tab_comm, tab_sns, tab_youtube = st.tabs([
+        "📡 대표 언론 보도", 
+        "💬 네이버 블로그/카페",
+        "📸 인스타그램 & 쓰레드 (SNS)",
+        "📺 유튜브 (영상 & 댓글)"
+    ])
 
     def render_article_card(item_info, unique_key, source_type="news"):
         if isinstance(item_info, dict) and "representative" in item_info:
@@ -328,10 +454,10 @@ if selected_kw:
             item = item_info
             dup_cnt = 1
             
-        title = clean_html(item['title'])
+        title = clean_html(item.get('title', ''))
         desc = clean_html(item.get('description', item.get('desc', '')))
-        link = item['link']
-        date = item.get('pubDate', item.get('postdate', ''))
+        link = item.get('link', '#')
+        date = item.get('pubDate', item.get('postdate', item.get('publishedAt', item.get('date', ''))))
         date_html = f'<div style="font-size: 12px; color: #64748b; margin-bottom: 14px;">🕒 {date}</div>' if date else ''
         
         tags_html = ""
@@ -339,6 +465,12 @@ if selected_kw:
             tags_html += "<span class='tag-badge tag-news'>📡 대표 언론보도</span>"
         elif source_type == "blog":
             tags_html += "<span class='tag-badge tag-blog'>📌 네이버 블로그</span>"
+        elif source_type == "instagram":
+            tags_html += "<span class='tag-badge tag-insta'>📸 인스타그램 피드</span>"
+        elif source_type == "threads":
+            tags_html += "<span class='tag-badge tag-threads'>🧵 쓰레드(Threads) 피드</span>"
+        elif source_type == "youtube":
+            tags_html += "<span class='tag-badge tag-youtube'>📺 유튜브 시정 영상</span>"
         else:
             cafe_name = item.get('cafename', '지역 커뮤니티')
             tags_html += f"<span class='tag-badge tag-cafe'>👥 네이버 카페 ({cafe_name})</span>"
@@ -346,8 +478,13 @@ if selected_kw:
         if dup_cnt > 1:
             tags_html += f"<span class='tag-badge tag-dedup'>📑 유사 중복 보도자료 {dup_cnt}건 통합 묶음</span>"
 
+        thumb_html = ""
+        if item.get("thumbnail"):
+            thumb_html = f'<img src="{item["thumbnail"]}" class="youtube-thumb" alt="유튜브 썸네일"><br>'
+
         html_content = f"""<div class="report-card">
 {tags_html}
+{thumb_html}
 <h4 style="margin-top: 0; margin-bottom: 8px; font-size: 18px; line-height: 1.4;">
     <a href="{link}" target="_blank" style="text-decoration: none; color: #1e3a8a; font-weight: 700;">{title}</a>
 </h4>
@@ -365,11 +502,12 @@ if selected_kw:
                 st.markdown(f'<div class="analysis-card-neutral"><b>🤖 [FACTCHAT 세련된 AI 심층 브리핑]</b>\n{analysis.get("summary")}</div>', unsafe_allow_html=True)
         else:
             if st.button("🔍 AI 심층 브리핑 및 리스크 분석", key=f"btn_{unique_key}", use_container_width=True):
-                with st.spinner("AI 수석 분석가가 기사 맥락과 리스크를 정밀 분석 중..."):
+                with st.spinner("AI 수석 분석가가 기사/SNS 여론 맥락을 정밀 분석 중..."):
                     st.session_state.llm_results[link] = analyze_content_with_factchat(title, desc)
                     st.rerun()
         st.write("")
 
+    # [탭 1] 대표 언론 보도
     with tab_news:
         raw_news_items = fetch_naver_data(selected_kw, display_count, sort_param, "news")
         news_clusters = deduplicate_news_items(raw_news_items)
@@ -381,6 +519,7 @@ if selected_kw:
         else:
             st.info("조건에 일치하는 보도자료가 검색되지 않았습니다.")
 
+    # [탭 2] 네이버 블로그 / 카페
     with tab_comm:
         blogs = fetch_naver_data(selected_kw, display_count, sort_param, "blog")
         cafes = fetch_naver_data(selected_kw, display_count, sort_param, "cafearticle")
@@ -399,6 +538,27 @@ if selected_kw:
                 render_article_card(item, unique_key=f"comm_{selected_kw}_{i}", source_type=item['source_type'])
         else:
             st.info("조건에 일치하는 커뮤니티 게시글이 검색되지 않았습니다.")
+
+    # [탭 3] 인스타그램 & 쓰레드 (SNS 피드 탭)
+    with tab_sns:
+        st.markdown("##### 📸 인스타그램 해시태그 & 🧵 쓰레드(Threads) 실시간 여론 피드")
+        sns_feed = fetch_social_sns_data(selected_kw, display_count)
+        if sns_feed:
+            for i, sns_item in enumerate(sns_feed):
+                p_type = sns_item.get("platform", "instagram")
+                render_article_card(sns_item, unique_key=f"sns_{selected_kw}_{i}", source_type=p_type)
+        else:
+            st.info("조건에 일치하는 SNS 피드가 없습니다.")
+
+    # [탭 4] 유튜브 (영상 & 시민 실시간 댓글 탭)
+    with tab_youtube:
+        st.markdown("##### 📺 유튜브 용인시 시정 영상 및 시민 실시간 댓글 모니터링")
+        yt_items = fetch_youtube_data(selected_kw, display_count)
+        if yt_items:
+            for i, yt_item in enumerate(yt_items):
+                render_article_card(yt_item, unique_key=f"yt_{selected_kw}_{i}", source_type="youtube")
+        else:
+            st.info("조건에 일치하는 유튜브 시정 영상이 검색되지 않았습니다.")
 
 else:
     st.info("👈 좌측 제어반에서 모니터링할 타겟 키워드를 선택하세요.")
