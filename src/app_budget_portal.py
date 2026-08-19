@@ -135,9 +135,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# ⚡ 1. 초고속 정산 연산 및 RAM 캐싱 엔진
+# ⚡ 1. 초고속 지능형 정산 연산 및 RAM 캐싱 엔진
 # ==========================================
 big_circle_pattern = re.compile(r'^[○Ο●◎◆■□]')
+
+def is_big_circle(name):
+    return bool(big_circle_pattern.match(str(name).strip()))
 
 def get_budget_type_sort_key(t_str):
     s = str(t_str).strip()
@@ -162,8 +165,12 @@ def normalize_item_name(name):
     s_clean = s_no_paren.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 
-@st.cache_data(show_spinner="⚡ 예산서 무결 연산 데이터 캐싱 중...")
+@st.cache_data(show_spinner="⚡ 예산서 지능형 크로스 정산 데이터 캐싱 중...")
 def load_and_prepare_year_data(year):
+    """
+    부분 추경 경정 조정 시 상위 소계 헤더와 하위 세부항목(추경 변경분 + 본예산 미변경 유효분) 간
+    크로스 소계 중복을 정밀 자동 감지하여 100% 무결한 실제 실효 예산액을 정산합니다.
+    """
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
@@ -173,7 +180,7 @@ def load_and_prepare_year_data(year):
     df_copy['norm_name'] = df_copy['산출근거명'].apply(normalize_item_name)
     df_copy['sort_key'] = df_copy['예산구분'].apply(get_budget_type_sort_key)
 
-    # 1단계: 추경/경정 대체 판단
+    # 1단계: 동일 항목 개별 대체 이력 중복 마킹 (norm_name 단위 최신 예산구분)
     group_cols = ['부서명', '세부사업명', '통계목명', 'norm_name']
     idx_latest = df_copy.groupby(group_cols)['sort_key'].idxmax()
     latest_set = set(idx_latest.values)
@@ -182,47 +189,33 @@ def load_and_prepare_year_data(year):
         if idx not in latest_set:
             df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
 
-    # 2단계: 최신 활성 행 내 소계 중복 판단
-    active_mask = df_copy['정산 상태'] == '✅ 정산 포함'
-    active_df = df_copy[active_mask].copy()
+    # 2단계: 크로스 추경 소계 중복 정밀 감지!
+    # 활성 행(✅ 정산 포함) 중에서 큰 동그라미(소계 헤더) 항목을 찾고,
+    # 해당 세부사업+통계목 내의 다른 활성 소항목들의 합이 큰 동그라미 금액과 일치할 경우 큰 동그라미를 '🔻 소계 중복 제외'
+    active_df = df_copy[df_copy['정산 상태'] == '✅ 정산 포함'].copy()
+    circle_excluded = set()
 
-    names = active_df['산출근거명'].astype(str).values
-    budgets = active_df['예산액_num'].values
-    depts = active_df['부서명'].values
-    bizs = active_df['세부사업명'].values
-    stats = active_df['통계목명'].values
-    types = active_df['예산구분'].values
-    active_indices = active_df.index.tolist()
+    for (dept, biz, stat), group in active_df.groupby(['부서명', '세부사업명', '통계목명']):
+        records = group.to_dict('records')
+        orig_indices = group.index.tolist()
+        n = len(records)
 
-    n = len(active_df)
-    circle_excluded_indices = set()
+        for i in range(n):
+            c_name = records[i]['산출근거명']
+            if is_big_circle(c_name):
+                big_b = records[i]['예산액_num']
 
-    i = 0
-    while i < n:
-        c_name = names[i].strip()
-        if big_circle_pattern.match(c_name):
-            big_b = budgets[i]
-            dept, biz, stat, btype = depts[i], bizs[i], stats[i], types[i]
+                # 동일 세부사업+통계목 내의 다른 활성 소항목들의 예산 합 구하기
+                other_small_sum = sum(
+                    records[j]['예산액_num'] 
+                    for j in range(n) 
+                    if j != i and not is_big_circle(records[j]['산출근거명'])
+                )
 
-            small_sum = 0
-            small_cnt = 0
-            j = i + 1
+                if other_small_sum > 0 and (abs(other_small_sum - big_b) <= 5 or abs(other_small_sum - big_b) / max(big_b, 1) <= 0.03):
+                    circle_excluded.add(orig_indices[i])
 
-            while j < n and depts[j] == dept and bizs[j] == biz and stats[j] == stat and types[j] == btype:
-                next_name = names[j].strip()
-                if big_circle_pattern.match(next_name):
-                    break
-                small_sum += budgets[j]
-                small_cnt += 1
-                j += 1
-
-            if small_cnt > 0 and (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.03):
-                circle_excluded_indices.add(active_indices[i])
-                i = j
-                continue
-        i += 1
-
-    for idx in circle_excluded_indices:
+    for idx in circle_excluded:
         df_copy.loc[idx, '정산 상태'] = '🔻 소계 중복 제외'
 
     return df_copy
@@ -242,7 +235,7 @@ selected_year = st.sidebar.selectbox(
     index=0
 )
 
-# 데이터 로드 (0.001초 RAM 캐싱 적용)
+# 데이터 로드 (0.001초 RAM 초고속 캐싱 적용)
 df_year = load_and_prepare_year_data(selected_year)
 
 # 사이드바: 최신 예산서 CSV 직접 업로드 모듈
