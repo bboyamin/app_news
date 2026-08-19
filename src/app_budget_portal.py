@@ -201,7 +201,7 @@ def normalize_item_name(name):
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
 
 @st.cache_data(show_spinner=False)
-def load_and_prepare_year_data(year):
+def load_and_prepare_year_data(year, cache_version="v2.1"):
     df = data_manager.load_year_data(year)
     if df.empty:
         return df
