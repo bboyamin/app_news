@@ -77,7 +77,6 @@ def search_relevant_contexts(query, n_results=3):
     자연어 질문(Query)에서 주요 형태소/키워드를 추출하고, 
     각 청크의 본문 텍스트 내 키워드 매칭 개수(빈도)를 스코어링하여 가장 유사한 Top-K 청크를 골라 반환합니다.
     """
-    # 질문에서 조사, 특수문자를 제외한 2글자 이상의 검색 키워드 단어 필터링
     keywords = [w for w in re.split(r'[^a-zA-Z0-9가-힣]+', query) if len(w) > 1]
     if not keywords:
         keywords = [query] if query.strip() else []
@@ -85,7 +84,6 @@ def search_relevant_contexts(query, n_results=3):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # 전체 지식베이스 로드
     cursor.execute("SELECT filename, chunk_index, content FROM document_chunks")
     rows = cursor.fetchall()
     
@@ -93,24 +91,19 @@ def search_relevant_contexts(query, n_results=3):
     if keywords:
         for filename, chunk_index, content in rows:
             score = 0
-            # 키워드 매칭 점수 집계 (빈도 누적)
             for kw in keywords:
                 score += content.count(kw)
                 
             if score > 0:
                 scored_chunks.append((score, content, filename, chunk_index))
                 
-    # 🌟 [Fallback] 요약 요구나 키워드 매칭 실패 시, 빈손으로 돌아가지 않고 
-    # 문서의 가장 앞부분(chunk_index가 작은 상위 3개 문단)을 기본 참고 문맥으로 매칭해 줍니다.
     if not scored_chunks and rows:
-        # chunk_index 순으로 정렬하여 상위 n_results 개를 기본으로 태워 보냅니다.
         rows.sort(key=lambda x: x[1])
         for filename, chunk_index, content in rows[:n_results]:
             scored_chunks.append((1, content, filename, chunk_index))
             
     conn.close()
     
-    # 매칭 점수가 높은 순으로 정렬
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
     
     contexts = []
@@ -125,7 +118,7 @@ def search_relevant_contexts(query, n_results=3):
 
 def get_indexed_files():
     """
-    현재 데이터베이스에 누적 기입되어 서비스 중인 한글/PDF 파일명 목록을 조회합니다.
+    현재 데이터베이스에 누적 기입되어 서비스 중인 파일명 목록을 조회합니다.
     """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -133,6 +126,41 @@ def get_indexed_files():
     rows = cursor.fetchall()
     conn.close()
     return sorted([row[0] for row in rows])
+
+def get_detailed_document_stats():
+    """
+    배포된 서버 DB에 저장된 파일별 조각 수, 총 글자 수, 미리보기 텍스트를 상세 조회합니다.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT filename, COUNT(*), SUM(LENGTH(content)) FROM document_chunks GROUP BY filename")
+    rows = cursor.fetchall()
+    
+    stats = []
+    for filename, chunk_count, total_chars in rows:
+        cursor.execute("SELECT content FROM document_chunks WHERE filename = ? AND chunk_index = 0", (filename,))
+        first_chunk = cursor.fetchone()
+        snippet = first_chunk[0][:80] + "..." if first_chunk else ""
+        stats.append({
+            "filename": filename,
+            "chunk_count": chunk_count,
+            "total_chars": total_chars,
+            "snippet": snippet
+        })
+        
+    conn.close()
+    return stats
+
+def get_all_chunks_raw():
+    """
+    DB에 적재된 모든 조각을 표 형태로 조회합니다.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT filename, chunk_index, LENGTH(content), content FROM document_chunks ORDER BY filename, chunk_index")
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
 
 def delete_all_documents():
     """

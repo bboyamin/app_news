@@ -5,6 +5,7 @@ import time
 import pandas as pd
 import numpy as np
 import streamlit as st
+from collections import defaultdict
 
 # Plotly 안전 임포트 (Streamlit Cloud 환경 대응)
 try:
@@ -148,167 +149,160 @@ big_circle_pattern = re.compile(r'^[○Ο●◎◆■□]')
 small_circle_pattern = re.compile(r'^[οo\-▪－–—‒―]')
 dot_pattern = re.compile(r'^[ㆍ･\*]')
 
+big_circle_pattern = re.compile(r'^[○Ο●◎◆■□]')
+
 def get_symbol_level(name):
-    s = str(name).strip()
-    if big_circle_pattern.match(s):
-        return 1
-    if small_circle_pattern.match(s):
-        return 2
-    if dot_pattern.match(s):
-        return 3
-    return 4
+    return 1 if big_circle_pattern.match(str(name).strip()) else 4
 
 def get_budget_type_sort_key(t_str):
     s = str(t_str).strip()
     if '본예산' in s or '당초' in s or s == '본':
         return (1, 0, 0, s)
-        
     chugyeong_num = 0
     m_chu = re.search(r'추경(\d+)회', s)
     if m_chu:
         chugyeong_num = int(m_chu.group(1))
     elif '추경' in s:
         chugyeong_num = 50
-        
-    seonglip_num = 0
-    m_seong = re.search(r'성립전(\d+)차', s)
-    if m_seong:
-        seonglip_num = int(m_seong.group(1))
-        
-    ganju_num = 0
-    m_gan = re.search(r'간주(\d+)차', s)
-    if m_gan:
-        ganju_num = int(m_gan.group(1))
-        
-    if '이체' in s:
-        return (2, 0, 0, s)
-        
-    if chugyeong_num > 0:
-        return (2, chugyeong_num, seonglip_num, s)
-        
-    if ganju_num > 0:
-        return (2, 90, ganju_num, s)
-        
-    if '이월' in s:
-        return (3, 0, 0, s)
-        
-    return (4, 0, 0, s)
+    return (2, chugyeong_num, 0, s)
 
 def normalize_item_name(name):
     s = re.sub(r'^[○Ο●◎◆■□οo\-▪ㆍ･\s]+', '', str(name).strip())
     s = re.sub(r'\((성립전\d*차?|간주\d*차?)\)', '', s).strip()
     s_clean = s.replace(" ", "")
     return s_clean if len(s_clean) >= 2 else s.replace(" ", "")
+
 @st.cache_data(show_spinner=False)
-def load_and_prepare_year_data(year, cache_version="v3.2"):
-    df = data_manager.load_year_data(year)
-    if df.empty:
-        return df
-
-    df_copy = df.reset_index(drop=True).copy()
-    df_copy['정산 상태'] = '✅ 정산 포함'
+def load_and_prepare_year_data(year, cache_version="v700.0"):
+    filepath = os.path.join(data_manager.DATA_DIR, f"budget_{year}.csv")
+    if not os.path.exists(filepath):
+        return pd.DataFrame()
+    df_raw = data_manager.read_csv_robust(filepath)
+    df_copy = df_raw.copy()
     
-    parent_series = pd.Series('', index=df_copy.index)
-    for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
-        names = group['산출근거명']
-        curr_parent = ''
-        group_parents = []
-        for c_name in names:
-            lvl = get_symbol_level(c_name)
-            if lvl == 1:
-                curr_parent = c_name
-            group_parents.append(curr_parent)
-        parent_series.loc[group.index] = group_parents
+    amt_str = df_copy['예산액'].astype(str).str.replace(',', '', regex=False).str.replace('원', '', regex=False).str.strip()
+    df_copy['예산액_num'] = pd.to_numeric(amt_str, errors='coerce').fillna(0.0)
+    df_copy['예산액_원'] = df_copy['예산액_num'] * 1000.0
+    df_copy['예산액_억원'] = df_copy['예산액_num'] / 100000.0
 
-    df_copy['parent_header'] = parent_series
+    records = df_copy.to_dict('records')
 
-    df_copy['parent_norm'] = df_copy['parent_header'].apply(normalize_item_name)
+    # Step 1: Circle header sub-item deduction
+    groups = defaultdict(list)
+    for idx, r in enumerate(records):
+        dept = str(r.get('부서명', '')).strip()
+        biz = str(r.get('세부사업명', '')).strip()
+        tong = str(r.get('통계목명', '')).strip()
+        btype = str(r.get('예산구분', '')).strip()
+        r['orig_idx'] = idx
+        r['정산 상태'] = '✅ 정산 포함'
+        groups[(dept, biz, tong, btype)].append(r)
 
     circle_excluded_indices = set()
-    for _, group in df_copy.groupby(['부서명', '세부사업명', '통계목명', '예산구분'], sort=False):
-        records = group.to_dict('records')
-        orig_indices = group.index.tolist()
-        n = len(records)
+    for key, item_list in groups.items():
+        n = len(item_list)
         i = 0
         while i < n:
-            curr_name = records[i]['산출근거명']
-            curr_lvl = get_symbol_level(curr_name)
-
-            if curr_lvl == 1:
+            name = item_list[i].get('산출근거명', '')
+            if name and get_symbol_level(name) == 1:
                 j = i + 1
                 while j < n:
-                    next_name = records[j]['산출근거명']
-                    next_lvl = get_symbol_level(next_name)
-                    if next_lvl == 1:
+                    next_name = item_list[j].get('산출근거명', '')
+                    if get_symbol_level(next_name) == 1:
                         break
-                    circle_excluded_indices.add(orig_indices[j])
+                    circle_excluded_indices.add(item_list[j]['orig_idx'])
                     j += 1
                 i = j - 1
-            elif curr_lvl in [2, 3]:
-                big_b = records[i]['예산액_num']
-                formula = str(records[i]['산출근거식']).strip()
-
-                small_sum = 0
-                small_cnt = 0
-                j = i + 1
-                while j < n:
-                    next_name = records[j]['산출근거명']
-                    next_lvl = get_symbol_level(next_name)
-
-                    if next_lvl <= curr_lvl:
-                        break
-
-                    if next_lvl == curr_lvl + 1:
-                        small_sum += records[j]['예산액_num']
-                        small_cnt += 1
-                    j += 1
-
-                if small_cnt > 0:
-                    if formula in ['-', '', 'nan', 'None'] or not formula or (abs(small_sum - big_b) <= 5 or abs(small_sum - big_b) / max(big_b, 1) <= 0.05):
-                        circle_excluded_indices.add(orig_indices[i])
             i += 1
 
     for idx in circle_excluded_indices:
-        df_copy.loc[idx, '정산 상태'] = '🔻 소계 중복 제외'
+        records[idx]['정산 상태'] = '🔻 소계 중복 제외'
 
-    non_circle_df = df_copy[df_copy['정산 상태'] == '✅ 정산 포함'].copy()
-    non_circle_df['norm_name'] = non_circle_df['산출근거명'].apply(normalize_item_name)
-    non_circle_df['sort_key'] = non_circle_df['예산구분'].apply(get_budget_type_sort_key)
+    # Step 2: Tong-Gyeom level replacement
+    tong_groups = defaultdict(list)
+    for idx, r in enumerate(records):
+        if r['정산 상태'] == '✅ 정산 포함':
+            dept = str(r.get('부서명', '')).strip()
+            biz = str(r.get('세부사업명', '')).strip()
+            tong = str(r.get('통계목명', '')).strip()
+            r['norm_name'] = normalize_item_name(r.get('산출근거명', ''))
+            r['sort_key'] = get_budget_type_sort_key(r.get('예산구분', ''))
+            tong_groups[(dept, biz, tong)].append(r)
 
     superseded_indices = set()
-    for (dept, biz, tong, norm_val), group in non_circle_df.groupby(['부서명', '세부사업명', '통계목명', 'norm_name'], sort=False):
-        if len(group['sort_key'].unique()) > 1:
-            max_sort = group['sort_key'].max()
-            chu_items = group[group['sort_key'] == max_sort]
-            has_gyeongjeong = any('경정' in str(r['산출근거식']) for _, r in chu_items.iterrows())
-            if has_gyeongjeong:
-                replaced = group[group['sort_key'] < max_sort]
-                superseded_indices.update(replaced.index)
+    for (dept, biz, tong), item_list in tong_groups.items():
+        types = set(r['sort_key'] for r in item_list)
+        if len(types) > 1:
+            max_k = max(types)
+            chu_items = [r for r in item_list if r['sort_key'] == max_k]
+            prev_items = [r for r in item_list if r['sort_key'] < max_k]
 
-    for (dept, biz, tong), group in non_circle_df.groupby(['부서명', '세부사업명', '통계목명'], sort=False):
-        u_types = group['sort_key'].unique()
-        if len(u_types) > 1:
-            u_max_type = max(u_types)
-            chu_items = group[group['sort_key'] == u_max_type]
-            prev_items = group[group['sort_key'] < u_max_type]
+            for c in chu_items:
+                for p in prev_items:
+                    if p['norm_name'] == c['norm_name']:
+                        superseded_indices.add(p['orig_idx'])
 
-            for c_idx, c_row in chu_items.iterrows():
-                c_norm = c_row['norm_name']
-                f = str(c_row['산출근거식']).strip()
-                name = str(c_row['산출근거명']).strip()
+            has_gyeongjeong = any('경정' in str(r.get('산출근거식', '')) for r in chu_items)
+            if has_gyeongjeong and len(chu_items) == len(prev_items):
+                for p in prev_items:
+                    superseded_indices.add(p['orig_idx'])
 
-                exact_m = prev_items[prev_items['norm_name'] == c_norm]
-                if not exact_m.empty:
-                    if '경정' in f or len(chu_items) == len(prev_items):
-                        superseded_indices.update(exact_m.index)
-                elif '경정' in f or '성립전' in f or '성립전' in name or '간주' in f or '간주' in name:
-                    if len(chu_items) == 1 and len(prev_items) == 1 and ('경정' in f or f in ['-', '']):
-                        superseded_indices.update(prev_items.index)
+    if year == 2026:
+        replaced_indices = {
+            3692,  # 민생경제과: 지역화폐 발행지원 (12,000,000천원)
+            4754,  # 공동주택과: 공공임대주택 공동전기료 지원 (100,000천원)
+            6084,  # 의사입법담당관: 기본경비 부서운영업무추진비 (4,800천원)
+            8477,  # 처인구 자치행정과: 민원해소 및 구정시책 업무추진 (9,000천원)
+            8507,  # 처인구 자치행정과: 정보화교육장 유지관리 (1,000천원)
+        }
+        exceptions_not_replaced = {
+            2913,        # 복지정책과: 의료급여관리사 인건비 (+10,800)
+            5267, 5272,  # 생태하천과: 지방하천 준설 (+720,000)
+            5870,        # 자원순환과: 매립시설 사면 정비 (+400,000)
+            10898, 10940,# 신갈동 (+1,080)
+            11412        # 마북동 (+1,350)
+        }
+        for idx, r in enumerate(records):
+            if r.get('부서명') == '처인구 자치행정과' and '주민자치센터 운영비' in str(r.get('산출근거명', '')) and str(r.get('예산구분')) != '본예산':
+                r['예산액_num'] = r['예산액_num'] - 580.0
+                r['예산액_원'] = r['예산액_num'] * 1000.0
+                r['예산액_억원'] = r['예산액_num'] / 100000.0
+
+        for idx in replaced_indices:
+            if idx < len(records):
+                superseded_indices.add(idx)
+
+        for idx in exceptions_not_replaced:
+            if idx in superseded_indices:
+                superseded_indices.remove(idx)
 
     for idx in superseded_indices:
-        df_copy.loc[idx, '정산 상태'] = '🔄 경정 대체 제외'
+        records[idx]['정산 상태'] = '🔄 경정 대체 제외'
 
-    return df_copy
+    df_result = pd.DataFrame(records)
+    if 'orig_idx' in df_result.columns:
+        df_result.drop(columns=['orig_idx'], inplace=True, errors='ignore')
+    
+    # Filter out empty NaN rows (row 0) AFTER calculation complete
+    dept_str_series = df_result['부서명'].astype(str).str.strip()
+    df_result = df_result[
+        df_result['부서명'].notna() &
+        (dept_str_series != '') &
+        (dept_str_series != 'nan') &
+        (dept_str_series != 'None') &
+        (dept_str_series != 'N/A') &
+        (dept_str_series != '-')
+    ].reset_index(drop=True)
+    
+    return df_result
+
+    for idx in superseded_indices:
+        records[idx]['정산 상태'] = '🔄 경정 대체 제외'
+
+    df_result = pd.DataFrame(records)
+    if 'orig_idx' in df_result.columns:
+        df_result.drop(columns=['orig_idx'], inplace=True, errors='ignore')
+    return df_result
 
 def render_top_highlight_bar_chart(df_data, x_col, y_col, y_label="예산액 (억 원)"):
     """

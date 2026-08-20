@@ -59,10 +59,6 @@ def clean_budget_dataframe(df_raw):
     """예산 데이터프레임 무결 정제 엔진 및 필수 컬럼 자동 생성"""
     df = df_raw.copy()
     
-    # 0행이 서브헤더 ('경정', '기정', '증감' 등)인 경우 서브헤더 행 제외
-    if len(df) > 0 and df.iloc[0].astype(str).str.contains("경정|기정|증감").any():
-        df = df.iloc[1:].copy()
-        
     # 컬럼명 공백 정돈
     df.columns = [str(c).strip() for c in df.columns]
     

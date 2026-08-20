@@ -41,7 +41,7 @@ class FactChatClient:
         }
 
         try:
-            response = requests.post(url, headers=headers, json=payload, verify=False, timeout=15)
+            response = requests.post(url, headers=headers, json=payload, verify=False, timeout=60)
             response.raise_for_status()
             return response.json()['choices'][0]['message']['content'].strip()
         except Exception as e:
@@ -69,7 +69,7 @@ class FactChatClient:
             payload["system"] = system_prompt
 
         try:
-            response = requests.post(url, headers=headers, json=payload, verify=False, timeout=15)
+            response = requests.post(url, headers=headers, json=payload, verify=False, timeout=60)
             response.raise_for_status()
             return response.json()['content'][0]['text'].strip()
         except Exception as e:
