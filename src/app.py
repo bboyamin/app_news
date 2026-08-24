@@ -54,8 +54,8 @@ FACTCHAT_API_KEY = get_secret_safe("FACTCHAT_API_KEY") or os.getenv("FACTCHAT_AP
 raw_base_url = get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 FACTCHAT_BASE_URL = clean_base_url(raw_base_url)
 
-SCHOOLINFO_API_KEY = get_secret_safe("SCHOOLINFO_API_KEY") or os.getenv("SCHOOLINFO_API_KEY")
-NEIS_API_KEY = get_secret_safe("NEIS_API_KEY") or os.getenv("NEIS_API_KEY")
+SCHOOLINFO_API_KEY = get_secret_safe("SCHOOLINFO_API_KEY") or os.getenv("SCHOOLINFO_API_KEY") or "3e325c2bd75d41788088c407f1c9d7af"
+NEIS_API_KEY = get_secret_safe("NEIS_API_KEY") or os.getenv("NEIS_API_KEY") or "2b0b2927d916447cb367f0aba0a4a21d"
 
 # 프로젝트 루트 경로 (src/ 의 상위 디렉토리)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -402,12 +402,19 @@ if active_query:
             
             # BBOYAMIN님 맞춤형 초고성능 프리미엄 시각적 포맷 가이드를 강제하는 시스템 프롬프트 주입
             system_instruction = (
-                "너는 최고의 스마트 스쿨 비서인 'BBOYAMIN 스마트 스쿨 에이전트'이다.\n\n"
-                "답변을 작성할 때 가독성을 극적으로 끌어올려 BBOYAMIN님이 한눈에 파악할 수 있도록 반드시 다음 규칙을 절대적으로 준수해라:\n"
-                "1. **표(Table) 형식의 적극적인 활용**: 식단 메뉴, 요일별 급식, 학사 일정(날짜와 행사명), 통계 데이터 등은 가급적 마크다운 표(Table)를 짜서 구조적으로 정렬하여 나타낼 것.\n"
-                "2. **굵은 강조와 이모지**: 주요 시험 기간, 방학식/개학식 날짜, 특이사항, 칼로리 정보 등 핵심 정보는 글씨를 **굵게 강조**하고 내용에 알맞은 시각적 이모지(🍱, 📅, 📊, 🌾, 🏫 등)를 풍성하게 붙여라.\n"
-                "3. **구분선과 문단 쪼개기**: 답변이 긴 경우 반드시 가로 구분선(---)과 소제목(### 🍱 최근 급식 정보 등)을 사용하여 챕터를 읽기 좋게 끊어서 제공해라.\n"
-                "4. **완결성**: 대화의 흐름에 맞추어 전문적이고 신뢰감 넘치며 친근하게 답해라."
+                "너는 대한민국 전국의 모든 학교 정보, 급식 식단, 학사일정, 시험일정을 실시간으로 정확하게 안내하는 'BBOYAMIN 스마트 스쿨 에이전트'이다.\n\n"
+                "[도구(Tool) 호출 필수 규칙]:\n"
+                "1. 학교 정보나 급식, 학사일정 관련 질문이 들어오면 반드시 적절한 MCP 도구를 호출해라.\n"
+                "2. 도구를 호출할 때는 반드시 필수 입력 파라미터를 빠짐없이 함께 전달해야 한다:\n"
+                "   - `get_school_meal` (급식): `sido` (예: '경기도', '서울특별시'), `name` (예: '용인고등학교'), `date` (선택)\n"
+                "   - `get_school_schedule` (학사일정): `sido` (예: '경기도', '서울특별시'), `name` (예: '용인고등학교')\n"
+                "   - `get_school_week` (시간표/주간): `sido`, `name`\n"
+                "   - `find_school` / `search_school`: `sido`, `sgg`, `kind`\n"
+                "3. 사용자가 시/도 명칭을 직접 언급하지 않더라도 학교명(예: '용인고등학교' ➡️ '경기도', '개포중학교' ➡️ '서울특별시', '외대부고' ➡️ '경기도')의 위치를 자연스럽게 추론하여 `sido` 파라미터에 반드시 입력해라.\n\n"
+                "[답변 표현 규칙]:\n"
+                "1. **표(Table) 형식 활용**: 식단 메뉴, 요일별 급식, 학사 일정(날짜와 행사명) 등은 마크다운 표(Table)를 짜서 정렬하여 나타낼 것.\n"
+                "2. **굵은 강조와 이모지**: 주요 시험 기간, 방학식/개학식 날짜, 칼로리 정보 등 핵심 정보는 글씨를 **굵게 강조**하고 이모지(🍱, 📅, 📊, 🌾, 🏫 등)를 붙여라.\n"
+                "3. **구분선과 문단 쪼개기**: 가로 구분선(---)과 소제목(### 🍱 최근 급식 정보 등)을 사용하여 읽기 좋게 구성해라."
             )
             
             api_messages = [{"role": "system", "content": system_instruction}]
