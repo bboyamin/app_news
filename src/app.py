@@ -154,41 +154,107 @@ def bootstrap_node_dependencies():
         except Exception as e:
             print(f"Failed to bootstrap npm package: {e}")
 
+STATIC_SCHOOL_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_school_meal",
+            "description": "전국 초중고등학교의 일자별 급식 메뉴, 칼로리, 알레르기 원재료 정보 조회",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sido": {"type": "string", "description": "시도명 (예: 경기도, 서울특별시 — 약칭 '서울', '경기' 가능)"},
+                    "name": {"type": "string", "description": "학교명 (예: 용인고등학교, 개포중학교, 외대부고)"},
+                    "date": {"type": "string", "description": "기준일 YYYYMMDD (예: 20260824, 기본: 오늘)"}
+                },
+                "required": ["sido", "name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_school_schedule",
+            "description": "전국 초중고등학교의 2026학년도 전체 학사일정 (시험기간, 개학식/방학식, 학부모총회 등) 조회",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sido": {"type": "string", "description": "시도명 (예: 경기도, 서울특별시)"},
+                    "name": {"type": "string", "description": "학교명 (예: 용인고등학교, 개포중학교)"},
+                    "year": {"type": "number", "description": "학년도 (예: 2026)"}
+                },
+                "required": ["sido", "name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_school_week",
+            "description": "전국 초중고등학교의 시간표 및 주간 학사정보 조회",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sido": {"type": "string", "description": "시도명 (예: 경기도, 서울특별시)"},
+                    "name": {"type": "string", "description": "학교명 (예: 용인고등학교)"}
+                },
+                "required": ["sido", "name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_school",
+            "description": "전국 학교 기본 정보 및 학교 코드 검색",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "sido": {"type": "string", "description": "시도명 (예: 경기도)"},
+                    "sgg": {"type": "string", "description": "시군구명 (예: 용인시)"},
+                    "kind": {"type": "string", "description": "학교급 (예: 고등학교)"}
+                },
+                "required": ["sido", "sgg", "kind"]
+            }
+        }
+    }
+]
+
 @st.cache_resource(show_spinner="스쿨 에이전트 엔진 로드 중...")
 def discover_school_mcp_tools():
-    if not MCP_AVAILABLE:
-        return []
-    bootstrap_node_dependencies() # 🌟 배포 환경 NPM 빌드 자동 부트스트랩 호출
-    schoolinfo_bin = get_mcp_executable_path("schoolinfo-mcp", "dist/mcp.js")
-    node_cmd = get_node_cmd()
-    school_env = get_mcp_env_vars()
-        
-    params = StdioServerParameters(command=node_cmd, args=[schoolinfo_bin], env=school_env)
     openai_tools = []
-    
-    async def discover():
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                server_tools = await session.list_tools()
-                for t in server_tools.tools:
-                    # OpenAI Tool Calling 규격으로 변환
-                    openai_tools.append({
-                        "type": "function",
-                        "function": {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.inputSchema
-                        }
-                    })
-    try:
-        run_async_safe(discover())
-    except Exception as e:
-        print(f"Failed to load tools for korean-school: {e}")
+    if MCP_AVAILABLE:
+        bootstrap_node_dependencies()
+        schoolinfo_bin = get_mcp_executable_path("schoolinfo-mcp", "dist/mcp.js")
+        node_cmd = get_node_cmd()
+        school_env = get_mcp_env_vars()
+            
+        params = StdioServerParameters(command=node_cmd, args=[schoolinfo_bin], env=school_env)
         
+        async def discover():
+            async with stdio_client(params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    server_tools = await session.list_tools()
+                    for t in server_tools.tools:
+                        openai_tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": t.name,
+                                "description": t.description,
+                                "parameters": t.inputSchema
+                            }
+                        })
+        try:
+            run_async_safe(discover())
+        except Exception as e:
+            print(f"Failed to load tools dynamically: {e}")
+            
+    if not openai_tools:
+        return STATIC_SCHOOL_TOOLS
     return openai_tools
 
-# 도구 스키마 로드
+# 도구 스키마 로드 (어떠한 경우에도 빈 배열이 아닌 정적 스키마 상시 확보)
 tools_schema = discover_school_mcp_tools()
 
 # ===================================================
