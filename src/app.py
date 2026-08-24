@@ -7,8 +7,25 @@ import streamlit as st
 import random
 from dotenv import load_dotenv
 import concurrent.futures
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+
+# MCP 패키지 동적 로드 및 예외 처리 (Streamlit Cloud 환경 호환)
+try:
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    MCP_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    try:
+        import sys
+        import subprocess
+        subprocess.run([sys.executable, "-m", "pip", "install", "mcp"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+        MCP_AVAILABLE = True
+    except Exception:
+        ClientSession = None
+        StdioServerParameters = None
+        stdio_client = None
+        MCP_AVAILABLE = False
 
 # SSL 경고 비활성화
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -55,6 +72,8 @@ def run_async_safe(coro):
 # [MCP 연동 코어] schoolinfo-mcp 실행 및 툴 호출
 # ===================================================
 async def execute_school_mcp_async(tool_name, arguments):
+    if not MCP_AVAILABLE:
+        return "[도구 실행 실패] mcp 패키지가 설치되어 있지 않아 도구를 실행할 수 없습니다."
     schoolinfo_bin = get_mcp_executable_path("schoolinfo-mcp", "dist/mcp.js")
     
     # 윈도우/맥/리눅스 공통으로 Node.js를 기반 실행기로 지정
@@ -106,6 +125,8 @@ def bootstrap_node_dependencies():
 
 @st.cache_resource(show_spinner="스쿨 에이전트 엔진 로드 중...")
 def discover_school_mcp_tools():
+    if not MCP_AVAILABLE:
+        return []
     bootstrap_node_dependencies() # 🌟 배포 환경 NPM 빌드 자동 부트스트랩 호출
     schoolinfo_bin = get_mcp_executable_path("schoolinfo-mcp", "dist/mcp.js")
     
