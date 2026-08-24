@@ -5,6 +5,7 @@ import requests
 import urllib3
 import streamlit as st
 import random
+import shutil
 from dotenv import load_dotenv
 import concurrent.futures
 
@@ -44,21 +45,52 @@ def get_secret_safe(key):
 FACTCHAT_API_KEY = get_secret_safe("FACTCHAT_API_KEY") or os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
 
-SCHOOLINFO_API_KEY = get_secret_safe("SCHOOLINFO_API_KEY") or os.getenv("SCHOOLINFO_API_KEY")
-NEIS_API_KEY = get_secret_safe("NEIS_API_KEY") or os.getenv("NEIS_API_KEY")
+SCHOOLINFO_API_KEY = get_secret_safe("SCHOOLINFO_API_KEY") or os.getenv("SCHOOLINFO_API_KEY") or "3e325c2bd75d41788088c407f1c9d7af"
+NEIS_API_KEY = get_secret_safe("NEIS_API_KEY") or os.getenv("NEIS_API_KEY") or "2b0b2927d916447cb367f0aba0a4a21d"
+
+# 프로젝트 루트 경로 (src/ 의 상위 디렉토리)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ===================================================
-# [하이브리드 경로 감지] OS별 실행 파일 경로 설정
+# [하이브리드 경로 감지] OS별 실행 파일 및 노드 경로 설정
 # ===================================================
+def get_node_cmd():
+    found = shutil.which("node") or shutil.which("nodejs")
+    if found:
+        return found
+    if os.name != 'nt':
+        for path in ["/usr/local/bin/node", "/usr/bin/node", "/bin/node"]:
+            if os.path.exists(path):
+                return path
+    return "node"
+
 def get_mcp_executable_path(package_name, script_rel_path):
     # 1. 윈도우용 수동 작업 공간 경로
     win_path = f"C:/mcp-workspace/node_modules/{package_name}/{script_rel_path}"
-    # 2. 맥북 / 리눅스 클라우드 서버용 로컬 프로젝트 경로
-    local_path = os.path.abspath(f"node_modules/{package_name}/{script_rel_path}")
-    
     if os.path.exists(win_path):
         return win_path
-    return local_path
+
+    # 2. 프로젝트 루트 기준 절대 경로
+    proj_path = os.path.join(PROJECT_ROOT, "node_modules", package_name, script_rel_path)
+    if os.path.exists(proj_path):
+        return proj_path
+
+    # 3. 현재 작업 디렉토리 기준 상대 경로
+    return os.path.abspath(f"node_modules/{package_name}/{script_rel_path}")
+
+def get_mcp_env_vars():
+    current_path = os.environ.get("PATH", "")
+    sys_paths = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin", "/home/appuser/.nvm/versions/node", "/usr/local/share/nvm"]
+    full_path = ":".join([p for p in sys_paths if os.path.exists(p)] + [current_path])
+    
+    school_env = {
+        "PATH": full_path
+    }
+    if SCHOOLINFO_API_KEY:
+        school_env["SCHOOLINFO_API_KEY"] = SCHOOLINFO_API_KEY
+    if NEIS_API_KEY:
+        school_env["NEIS_API_KEY"] = NEIS_API_KEY
+    return school_env
 
 # ===================================================
 # [비동기 안전 실행 헬퍼] Streamlit 스레드 충돌 방지
@@ -75,22 +107,8 @@ async def execute_school_mcp_async(tool_name, arguments):
     if not MCP_AVAILABLE:
         return "[도구 실행 실패] mcp 패키지가 설치되어 있지 않아 도구를 실행할 수 없습니다."
     schoolinfo_bin = get_mcp_executable_path("schoolinfo-mcp", "dist/mcp.js")
-    
-    # 윈도우/맥/리눅스 공통으로 Node.js를 기반 실행기로 지정
-    node_cmd = "node"
-    if os.name != 'nt': # Unix/Mac 환경의 경우 절대경로가 있으면 사용
-        node_cmd = "/usr/local/bin/node" if os.path.exists("/usr/local/bin/node") else "node"
-        
-    env_vars = {
-        "PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
-    }
-    
-    # 발급받은 API 키들을 환경변수로 주입
-    school_env = env_vars.copy()
-    if SCHOOLINFO_API_KEY:
-        school_env["SCHOOLINFO_API_KEY"] = SCHOOLINFO_API_KEY
-    if NEIS_API_KEY:
-        school_env["NEIS_API_KEY"] = NEIS_API_KEY
+    node_cmd = get_node_cmd()
+    school_env = get_mcp_env_vars()
         
     params = StdioServerParameters(command=node_cmd, args=[schoolinfo_bin], env=school_env)
 
@@ -116,10 +134,12 @@ def execute_mcp_tool(tool_name, arguments):
 # ===================================================
 def bootstrap_node_dependencies():
     # 배포 서버 환경에서 schoolinfo-mcp 모듈이 없을 때 자동 설치하는 자가 세팅 헬퍼
-    if not os.path.exists("node_modules/schoolinfo-mcp"):
+    target_dir = os.path.join(PROJECT_ROOT, "node_modules", "schoolinfo-mcp")
+    if not os.path.exists(target_dir):
         try:
             import subprocess
-            subprocess.run(["npm", "install"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            npm_cmd = shutil.which("npm") or "npm"
+            subprocess.run([npm_cmd, "install"], cwd=PROJECT_ROOT, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception as e:
             print(f"Failed to bootstrap npm package: {e}")
 
@@ -129,17 +149,8 @@ def discover_school_mcp_tools():
         return []
     bootstrap_node_dependencies() # 🌟 배포 환경 NPM 빌드 자동 부트스트랩 호출
     schoolinfo_bin = get_mcp_executable_path("schoolinfo-mcp", "dist/mcp.js")
-    
-    node_cmd = "node"
-    if os.name != 'nt':
-        node_cmd = "/usr/local/bin/node" if os.path.exists("/usr/local/bin/node") else "node"
-    env_vars = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")}
-    
-    school_env = env_vars.copy()
-    if SCHOOLINFO_API_KEY:
-        school_env["SCHOOLINFO_API_KEY"] = SCHOOLINFO_API_KEY
-    if NEIS_API_KEY:
-        school_env["NEIS_API_KEY"] = NEIS_API_KEY
+    node_cmd = get_node_cmd()
+    school_env = get_mcp_env_vars()
         
     params = StdioServerParameters(command=node_cmd, args=[schoolinfo_bin], env=school_env)
     openai_tools = []
