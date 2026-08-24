@@ -405,7 +405,7 @@ if active_query:
                     iteration += 1
                     
                     payload = {
-                        "model": "gpt-5.4",
+                        "model": "gpt-5.5",
                         "messages": current_messages,
                         "tools": tools_schema if tools_schema else None,
                         "tool_choice": "auto" if tools_schema else None,
