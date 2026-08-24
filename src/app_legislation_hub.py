@@ -199,7 +199,7 @@ def agentic_law_fetch(user_prompt: str) -> dict:
         )
         try:
             payload = {
-                "model": "gpt-5.4",
+                "model": "gpt-5.5",
                 "messages": [
                     {"role": "system", "content": system_analyzer},
                     {"role": "user", "content": user_prompt}
@@ -376,7 +376,7 @@ def agentic_law_fetch(user_prompt: str) -> dict:
             
             try:
                 payload = {
-                    "model": "gpt-5.4",
+                    "model": "gpt-5.5",
                     "messages": [
                         {"role": "system", "content": system_index_picker},
                         {"role": "user", "content": user_prompt_index}
@@ -462,7 +462,7 @@ if prompt := st.chat_input("자치법규나 법령에 대해 무엇이든 질문
                         
                 headers = {"Authorization": f"Bearer {FACTCHAT_API_KEY}", "Content-Type": "application/json"}
                 payload = {
-                    "model": "gpt-5.4",
+                    "model": "gpt-5.5",
                     "messages": api_messages,
                     "temperature": 0.1
                 }

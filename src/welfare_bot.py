@@ -105,7 +105,7 @@ def run_welfare_bot():
     # 1차 호출: AI에게 도구 설명서와 함께 질문 전달
     print("\n🤖 [1차 호출] AI에게 민원인 질문 분석과 도구 조회를 요청하는 중...")
     payload = {
-        "model": "gpt-5.4",
+        "model": "gpt-5.5",
         "messages": messages,
         "tools": tools_schema,
         "tool_choice": "auto",
@@ -164,7 +164,7 @@ def run_welfare_bot():
             # 2차 호출: 최종 결과 조합 요청
             print("🤖 [2차 호출] 복지 혜택 조회 데이터를 AI에게 전달하여 최종 답변 생성을 요청하는 중...")
             payload_2 = {
-                "model": "gpt-5.4",
+                "model": "gpt-5.5",
                 "messages": messages,
                 "temperature": 0.3
             }

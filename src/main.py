@@ -32,7 +32,7 @@ class FactChatClient:
             "Content-Type": "application/json"
         }
         payload = {
-            "model": "gpt-5.4", # 필요시 gpt-5.5 등으로 변경 가능
+            "model": "gpt-5.5",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}

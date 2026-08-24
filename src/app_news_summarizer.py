@@ -291,7 +291,7 @@ def ai_summarize(title, content):
 """
 
     payload = {
-        "model": "gpt-5.4",
+        "model": "gpt-5.5",
         "messages": [
             {"role": "user", "content": prompt}
         ],

@@ -212,7 +212,7 @@ with tab_chat:
                         
                 try:
                     payload = {
-                        "model": "gpt-5.4",
+                        "model": "gpt-5.5",
                         "messages": api_messages,
                         "temperature": 0.15
                     }

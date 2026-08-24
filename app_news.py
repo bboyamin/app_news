@@ -480,7 +480,7 @@ def analyze_content_with_factchat(title, description, source_type="news", link="
     user_prompt = f"제목: {title}\n내용/요약: {description}{transcript_info}"
     
     payload = {
-        "model": "gpt-5.4",
+        "model": "gpt-5.5",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt}

@@ -73,7 +73,7 @@ def run_test():
     # 2. 1차 API 호출: 질문과 함께 '도구 설명서(tools)'를 보냅니다.
     print("\n🤖 [1차 호출] AI에게 질문과 도구 설명서를 전달하는 중...")
     payload = {
-        "model": "gpt-5.4",
+        "model": "gpt-5.5",
         "messages": messages,
         "tools": tools_schema,     # AI에게 도구 설명서를 함께 제공!
         "tool_choice": "auto",     # AI가 알아서 도구를 쓸지 말지 결정하도록 함
@@ -120,7 +120,7 @@ def run_test():
             # 2차 API 호출: 이제 결과 데이터도 대화 기록에 들어있으므로, 최종 답변을 요구합니다.
             print("🤖 [2차 호출] 도구 실행 결과를 포함해 AI에게 최종 대화를 요청하는 중...")
             payload_2 = {
-                "model": "gpt-5.4",
+                "model": "gpt-5.5",
                 "messages": messages,
                 "temperature": 0.1
             }
