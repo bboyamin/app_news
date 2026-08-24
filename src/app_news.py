@@ -25,11 +25,17 @@ st.set_page_config(page_title="용인시 시정 동향 모니터링", page_icon=
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 load_dotenv()
 
-CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
-CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
-FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY")
+def get_secret_safe(key):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return None
+
+CLIENT_ID = get_secret_safe("NAVER_CLIENT_ID") or os.getenv("NAVER_CLIENT_ID")
+CLIENT_SECRET = get_secret_safe("NAVER_CLIENT_SECRET") or os.getenv("NAVER_CLIENT_SECRET")
+FACTCHAT_API_KEY = get_secret_safe("FACTCHAT_API_KEY") or os.getenv("FACTCHAT_API_KEY") or "sPIxEkQlymX16JKBGeszw91HGP9PfsHv"
+FACTCHAT_BASE_URL = get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+YOUTUBE_API_KEY = get_secret_safe("YOUTUBE_API_KEY") or os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 KEYWORD_FILE = "keywords_db.json"
 
 # 언론사 뉴스 도메인 블랙리스트 (소셜 탭에서 뉴스 기사 100% 차단)
@@ -528,6 +534,10 @@ with st.sidebar:
             st.rerun()
             
     st.divider()
+    if st.button("🔄 AI 분석 결과 초기화", use_container_width=True):
+        st.session_state.llm_results = {}
+        st.rerun()
+
     st.subheader("3. 새 키워드 추가")
     new_keyword = st.text_input("키워드 입력", placeholder="예: 처인구")
     if st.button("➕ 등록", use_container_width=True) and new_keyword:
@@ -596,7 +606,12 @@ if selected_kw:
 
         st.markdown(html_content, unsafe_allow_html=True)
         
-        if link in st.session_state.llm_results:
+        is_cached_valid = (
+            link in st.session_state.llm_results 
+            and "오류 발생" not in st.session_state.llm_results[link].get("summary", "")
+        )
+        
+        if is_cached_valid:
             analysis = st.session_state.llm_results[link]
             if analysis.get("is_negative"):
                 st.markdown(f'<div class="analysis-card-risk"><b>⚠️ [시민 민원 / 여론 리스크 감지]</b>\n{analysis.get("point")}\n\n{analysis.get("summary")}</div>', unsafe_allow_html=True)
