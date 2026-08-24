@@ -126,12 +126,14 @@ async def execute_school_mcp_async(tool_name, arguments):
         async with ClientSession(read, write) as session:
             await session.initialize()
             result = await session.call_tool(name=tool_name, arguments=arguments)
-            # content 내용 중 텍스트 포맷들만 병합
-            return "\n".join([content.text for content in result.content if hasattr(content, 'text')])
+            # content 내용 중 텍스트 포맷들만 안전하게 문자열 변환 병합
+            res_texts = [str(content.text) for content in result.content if hasattr(content, 'text') and content.text]
+            return "\n".join(res_texts) if res_texts else "조회된 학교 정보 데이터가 없습니다."
 
 def execute_mcp_tool(tool_name, arguments):
     try:
-        return run_async_safe(execute_school_mcp_async(tool_name, arguments))
+        res = run_async_safe(execute_school_mcp_async(tool_name, arguments))
+        return str(res) if res is not None else "조회된 학교 정보 데이터가 없습니다."
     except Exception as e:
         err_msg = str(e)
         if "quota exceeded" in err_msg or "apiKey" in err_msg or "429" in err_msg:
@@ -468,7 +470,16 @@ if active_query:
                         total_calls = len(tool_calls)
                         for idx, tool_call in enumerate(tool_calls):
                             function_name = tool_call['function']['name']
-                            function_args = json.loads(tool_call['function']['arguments'])
+                            raw_args = tool_call['function']['arguments']
+                            if isinstance(raw_args, dict):
+                                function_args = raw_args
+                            elif isinstance(raw_args, str):
+                                try:
+                                    function_args = json.loads(raw_args)
+                                except Exception:
+                                    function_args = {}
+                            else:
+                                function_args = {}
                             
                             # 병렬 호출일 경우 서브 번호(예: 2-1단계, 2-2단계)를 부착해 중복 오해 불식 및 가시성 극대화
                             step_label = f"{iteration}-{idx + 1}" if total_calls > 1 else f"{iteration}"
