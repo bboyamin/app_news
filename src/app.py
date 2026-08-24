@@ -41,9 +41,18 @@ def get_secret_safe(key):
     except Exception:
         return None
 
+def clean_base_url(url):
+    if not url:
+        url = "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    url = str(url).strip().rstrip('/')
+    if url.endswith('/chat/completions'):
+        url = url[:-17].rstrip('/')
+    return url
+
 # API 키 및 설정 로드
-FACTCHAT_API_KEY = get_secret_safe("FACTCHAT_API_KEY") or os.getenv("FACTCHAT_API_KEY")
-FACTCHAT_BASE_URL = get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+FACTCHAT_API_KEY = get_secret_safe("FACTCHAT_API_KEY") or os.getenv("FACTCHAT_API_KEY") or "sPIxEkQlymX16JKBGeszw91HGP9PfsHv"
+raw_base_url = get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+FACTCHAT_BASE_URL = clean_base_url(raw_base_url)
 
 SCHOOLINFO_API_KEY = get_secret_safe("SCHOOLINFO_API_KEY") or os.getenv("SCHOOLINFO_API_KEY") or "3e325c2bd75d41788088c407f1c9d7af"
 NEIS_API_KEY = get_secret_safe("NEIS_API_KEY") or os.getenv("NEIS_API_KEY") or "2b0b2927d916447cb367f0aba0a4a21d"

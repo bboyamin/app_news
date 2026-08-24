@@ -31,10 +31,19 @@ def get_secret_safe(key):
     except Exception:
         return None
 
+def clean_base_url(url):
+    if not url:
+        url = "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    url = str(url).strip().rstrip('/')
+    if url.endswith('/chat/completions'):
+        url = url[:-17].rstrip('/')
+    return url
+
 CLIENT_ID = get_secret_safe("NAVER_CLIENT_ID") or os.getenv("NAVER_CLIENT_ID")
 CLIENT_SECRET = get_secret_safe("NAVER_CLIENT_SECRET") or os.getenv("NAVER_CLIENT_SECRET")
 FACTCHAT_API_KEY = get_secret_safe("FACTCHAT_API_KEY") or os.getenv("FACTCHAT_API_KEY") or "sPIxEkQlymX16JKBGeszw91HGP9PfsHv"
-FACTCHAT_BASE_URL = get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+raw_base_url = get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+FACTCHAT_BASE_URL = clean_base_url(raw_base_url)
 YOUTUBE_API_KEY = get_secret_safe("YOUTUBE_API_KEY") or os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 KEYWORD_FILE = "keywords_db.json"
 
