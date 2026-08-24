@@ -78,12 +78,23 @@ def get_article_content(url):
     except Exception:
         return None
 
+def clean_base_url(url):
+    if not url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    raw_url = str(url).strip()
+    if "factchat-cloud.mindlogic.ai" in raw_url and "/v1/gateway" not in raw_url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    clean_base = raw_url.rstrip('/')
+    if clean_base.endswith("/chat/completions"):
+        clean_base = clean_base[:-17].rstrip('/')
+    return clean_base
+
 def factchat_summarize(title, content):
     """
     다른 챗봇 프로젝트에 사용한 FactChat API를 이용하여 기사 본문을 3줄 요약합니다.
     """
     api_key = os.getenv("FACTCHAT_API_KEY")
-    base_url = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    base_url = clean_base_url(os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway")
     
     if not api_key:
         print("   - [경고] FACTCHAT_API_KEY가 없습니다. 임시 요약기를 작동합니다.")

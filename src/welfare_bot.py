@@ -8,9 +8,19 @@ from dotenv import load_dotenv
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # .env 환경 변수 로드
-load_dotenv()
+def clean_base_url(url):
+    if not url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    raw_url = str(url).strip()
+    if "factchat-cloud.mindlogic.ai" in raw_url and "/v1/gateway" not in raw_url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    clean_base = raw_url.rstrip('/')
+    if clean_base.endswith("/chat/completions"):
+        clean_base = clean_base[:-17].rstrip('/')
+    return clean_base
+
 FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
-FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+FACTCHAT_BASE_URL = clean_base_url(os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway")
 
 # ===================================================
 # 1단계: 파이썬이 실행할 "진짜 복지 자격 조회" 함수 선언

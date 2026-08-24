@@ -12,6 +12,17 @@ load_dotenv()
 FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
 FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL")
 
+def clean_base_url(url):
+    if not url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    raw_url = str(url).strip()
+    if "factchat-cloud.mindlogic.ai" in raw_url and "/v1/gateway" not in raw_url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    clean_base = raw_url.rstrip('/')
+    if clean_base.endswith("/chat/completions"):
+        clean_base = clean_base[:-17].rstrip('/')
+    return clean_base
+
 class FactChatClient:
     """
     사내 FactChat API Gateway 클라이언트 래퍼 클래스
@@ -20,11 +31,11 @@ class FactChatClient:
         if not FACTCHAT_API_KEY:
             raise ValueError("FACTCHAT_API_KEY가 .env 파일에 설정되지 않았습니다.")
         self.api_key = FACTCHAT_API_KEY
-        self.base_url = FACTCHAT_BASE_URL or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+        self.base_url = clean_base_url(FACTCHAT_BASE_URL or "https://factchat-cloud.mindlogic.ai/v1/gateway")
 
     def ask_gpt(self, prompt: str, system_prompt: str = "You are a helpful assistant.", temperature: float = 0.3) -> str:
         """
-        OpenAI 규격(gpt-5.4 등) 모델 호출 함수
+        OpenAI 규격(gpt-5.5 등) 모델 호출 함수
         """
         url = f"{self.base_url}/chat/completions"
         headers = {

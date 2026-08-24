@@ -23,9 +23,26 @@ from rag_engine import (
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 load_dotenv()
 
+def get_secret_safe(key):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return None
+
+def clean_base_url(url):
+    if not url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    raw_url = str(url).strip()
+    if "factchat-cloud.mindlogic.ai" in raw_url and "/v1/gateway" not in raw_url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    clean_base = raw_url.rstrip('/')
+    if clean_base.endswith("/chat/completions"):
+        clean_base = clean_base[:-17].rstrip('/')
+    return clean_base
+
 # API 설정 로드
-FACTCHAT_API_KEY = os.getenv("FACTCHAT_API_KEY")
-FACTCHAT_BASE_URL = os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway"
+FACTCHAT_API_KEY = get_secret_safe("FACTCHAT_API_KEY") or os.getenv("FACTCHAT_API_KEY")
+FACTCHAT_BASE_URL = clean_base_url(get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway")
 
 # 🎨 스트림릿 페이지 설정 및 수려한 테마 적용
 st.set_page_config(

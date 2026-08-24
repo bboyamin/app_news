@@ -33,9 +33,21 @@ def get_secret(key_names, default_val=""):
             return val.strip(), ".env 환경변수"
     return default_val, "기본 설정"
 
+def clean_base_url(url):
+    if not url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    raw_url = str(url).strip()
+    if "factchat-cloud.mindlogic.ai" in raw_url and "/v1/gateway" not in raw_url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    clean_base = raw_url.rstrip('/')
+    if clean_base.endswith("/chat/completions"):
+        clean_base = clean_base[:-17].rstrip('/')
+    return clean_base
+
 LAW_OC, LAW_OC_SOURCE = get_secret(["LAW_OC", "law_oc"], "a11223344556677")
 FACTCHAT_API_KEY, FC_KEY_SOURCE = get_secret(["FACTCHAT_API_KEY", "FACTCHAT_KEY", "factchat_api_key", "factchat_key"])
-FACTCHAT_BASE_URL, _ = get_secret(["FACTCHAT_BASE_URL", "factchat_base_url"], "https://factchat-cloud.mindlogic.ai/v1/gateway")
+raw_base_url, _ = get_secret(["FACTCHAT_BASE_URL", "factchat_base_url"], "https://factchat-cloud.mindlogic.ai/v1/gateway")
+FACTCHAT_BASE_URL = clean_base_url(raw_base_url)
 
 # CSS 스틸-그레이 & 오피스 그린 관공서 특화 프리미엄 테마 주입
 st.markdown("""
