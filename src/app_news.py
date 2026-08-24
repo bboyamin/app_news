@@ -493,27 +493,34 @@ def analyze_content_with_factchat(title, description, source_type="news", link="
 """
     
     user_prompt = f"제목: {title}\n내용/요약: {description}{transcript_info}"
-    
-    payload = {
-        "model": "gpt-5.5",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "temperature": 0.15
-    }
     headers = {"Authorization": f"Bearer {FACTCHAT_API_KEY}", "Content-Type": "application/json"}
+    target_url = f"{FACTCHAT_BASE_URL}/chat/completions"
     
-    try:
-        res = session.post(f"{FACTCHAT_BASE_URL}/chat/completions", headers=headers, json=payload, verify=False, timeout=25)
-        res.raise_for_status()
-        result_text = res.json()['choices'][0]['message']['content'].strip()
-        
-        if "{" in result_text and "}" in result_text:
-            result_text = result_text[result_text.find("{"):result_text.rfind("}")+1]
-        return json.loads(result_text)
-    except Exception as e:
-        return {"summary": f"요약 분석 중 오류 발생: {e}", "is_negative": False, "point": ""}
+    candidate_models = ["gpt-5.5", "gpt-5.6-luna", "gemini-3.6-flash"]
+    last_err = ""
+    
+    for model_name in candidate_models:
+        payload = {
+            "model": model_name,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.15
+        }
+        try:
+            res = requests.post(target_url, headers=headers, json=payload, verify=False, timeout=25)
+            if res.status_code == 200:
+                result_text = res.json()['choices'][0]['message']['content'].strip()
+                if "{" in result_text and "}" in result_text:
+                    result_text = result_text[result_text.find("{"):result_text.rfind("}")+1]
+                return json.loads(result_text)
+            else:
+                last_err = f"HTTP {res.status_code}: {res.text[:100]}"
+        except Exception as e:
+            last_err = str(e)
+            
+    return {"summary": f"요약 분석 중 오류 발생: {last_err}", "is_negative": False, "point": ""}
 
 # ==========================================
 # 6. 화면 UI 렌더링
