@@ -50,6 +50,31 @@ FACTCHAT_BASE_URL = clean_base_url(raw_base_url)
 YOUTUBE_API_KEY = get_secret_safe("YOUTUBE_API_KEY") or os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY")
 KEYWORD_FILE = "keywords_db.json"
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def discover_active_models(api_key, base_url):
+    custom_model = get_secret_safe("FACTCHAT_MODEL") or os.getenv("FACTCHAT_MODEL")
+    if custom_model:
+        return [custom_model]
+        
+    default_priority = ["gpt-5.5", "gpt-5.6-luna", "gemini-3.6-flash", "gpt-5.6-terra"]
+    if not api_key or not base_url:
+        return default_priority
+        
+    try:
+        models_url = f"{base_url}/models"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        res = requests.get(models_url, headers=headers, verify=False, timeout=5)
+        if res.status_code == 200:
+            active_ids = [m['id'] for m in res.json().get('data', []) if 'id' in m]
+            filtered = [m for m in default_priority if m in active_ids]
+            if filtered:
+                return filtered + [m for m in active_ids if m not in filtered]
+            if active_ids:
+                return active_ids
+    except Exception:
+        pass
+    return default_priority
+
 # 언론사 뉴스 도메인 블랙리스트 (소셜 탭에서 뉴스 기사 100% 차단)
 NEWS_DOMAINS = [
     "naver.com", "daum.net", "news", "chosun", "donga", "joongang", "ytn", 
@@ -499,7 +524,7 @@ def analyze_content_with_factchat(title, description, source_type="news", link="
     headers = {"Authorization": f"Bearer {FACTCHAT_API_KEY}", "Content-Type": "application/json"}
     target_url = f"{FACTCHAT_BASE_URL}/chat/completions"
     
-    candidate_models = ["gpt-5.5", "gpt-5.6-luna", "gemini-3.6-flash"]
+    candidate_models = discover_active_models(FACTCHAT_API_KEY, FACTCHAT_BASE_URL)
     last_err = ""
     
     for model_name in candidate_models:
