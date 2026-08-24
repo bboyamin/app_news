@@ -33,11 +33,14 @@ def get_secret_safe(key):
 
 def clean_base_url(url):
     if not url:
-        url = "https://factchat-cloud.mindlogic.ai/v1/gateway"
-    url = str(url).strip().rstrip('/')
-    if url.endswith('/chat/completions'):
-        url = url[:-17].rstrip('/')
-    return url
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    raw_url = str(url).strip()
+    if "factchat-cloud.mindlogic.ai" in raw_url and "/v1/gateway" not in raw_url:
+        return "https://factchat-cloud.mindlogic.ai/v1/gateway"
+    clean_base = raw_url.rstrip('/')
+    if clean_base.endswith("/chat/completions"):
+        clean_base = clean_base[:-17].rstrip('/')
+    return clean_base
 
 CLIENT_ID = get_secret_safe("NAVER_CLIENT_ID") or os.getenv("NAVER_CLIENT_ID")
 CLIENT_SECRET = get_secret_safe("NAVER_CLIENT_SECRET") or os.getenv("NAVER_CLIENT_SECRET")
@@ -511,12 +514,17 @@ def analyze_content_with_factchat(title, description, source_type="news", link="
         try:
             res = requests.post(target_url, headers=headers, json=payload, verify=False, timeout=25)
             if res.status_code == 200:
-                result_text = res.json()['choices'][0]['message']['content'].strip()
-                if "{" in result_text and "}" in result_text:
-                    result_text = result_text[result_text.find("{"):result_text.rfind("}")+1]
-                return json.loads(result_text)
+                res_json = res.json()
+                result_text = res_json['choices'][0]['message']['content'].strip()
+                try:
+                    if "{" in result_text and "}" in result_text:
+                        json_str = result_text[result_text.find("{"):result_text.rfind("}")+1]
+                        return json.loads(json_str)
+                    return {"summary": result_text, "is_negative": False, "point": ""}
+                except Exception:
+                    return {"summary": result_text, "is_negative": False, "point": ""}
             else:
-                last_err = f"HTTP {res.status_code}: {res.text[:100]}"
+                last_err = f"HTTP {res.status_code} (URL: {target_url})"
         except Exception as e:
             last_err = str(e)
             
