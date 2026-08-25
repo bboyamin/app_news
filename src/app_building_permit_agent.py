@@ -517,6 +517,17 @@ try:
                     items = res_json.get('response', {}).get('body', {}).get('items', {}).get('item', [])
                     if isinstance(items, dict):
                         items = [items]
+
+                    # 🌟 본번 기준 동일 필지 가지번(286-3 처인구청 등) 대장 2차 폴백 검색
+                    if not items and parcel_info.get("ji") == "0000":
+                        fallback_params = dict(params)
+                        if "ji" in fallback_params:
+                            del fallback_params["ji"]
+                        res_fb = requests.get(url, params=fallback_params, timeout=10)
+                        items = res_fb.json().get('response', {}).get('body', {}).get('items', {}).get('item', [])
+                        if isinstance(items, dict):
+                            items = [items]
+
                     if items:
                         # 🌟 주건축물 최우선 정렬 + 연면적 내림차순 정렬 (부속건축물 경비실/창고 1층 오선택 100% 방지)
                         sorted_items = sorted(
@@ -535,11 +546,12 @@ try:
                         
                         raw_bld_nm = str(item.get('bldNm') or "").strip()
                         raw_dong_nm = str(item.get('dongNm') or "").strip()
+                        juso_bd_nm = str(parcel_info.get('bdNm') or "").strip()
                         
-                        # 건물명 원형 표기 (공란이면 (공란) 표기)
-                        bld_nm = raw_bld_nm if raw_bld_nm else "(공란)"
+                        # 건물명 원형 표기 (공공 API bdNm "처인구청" 등 보정 지원)
+                        bld_nm = raw_bld_nm if raw_bld_nm else (juso_bd_nm if juso_bd_nm else "(공란)")
                         if raw_dong_nm:
-                            bld_display = f"{bld_nm} ({raw_dong_nm})" if raw_bld_nm else f"(공란) [{raw_dong_nm}]"
+                            bld_display = f"{bld_nm} ({raw_dong_nm})"
                         else:
                             bld_display = bld_nm
 
