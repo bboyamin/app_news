@@ -383,17 +383,23 @@ try:
                         if len(adm_cd) >= 10:
                             sigungu = adm_cd[:5]
                             bjdong = adm_cd[5:10]
-                            bun_val = str(item.get('lnbrMnnm', '0')).zfill(4)
-                            ji_val = str(item.get('lnbrSlno', '0')).zfill(4)
-                            return {
-                                "sigunguCd": sigungu,
-                                "bjdongCd": bjdong,
-                                "bjdongNm": item.get('emdNm', '해당동'),
-                                "bun": bun_val,
-                                "ji": ji_val,
-                                "roadAddr": item.get('roadAddr', ''),
-                                "jibunAddr": item.get('jibunAddr', '')
-                            }
+                        # 사용자가 명시한 본번/부번 정밀 우선권 적용
+                        nums = re.findall(r'[0-9]+', addr_clean)
+                        user_bun = str(int(nums[0])).zfill(4) if len(nums) > 0 else None
+                        user_ji = str(int(nums[1])).zfill(4) if len(nums) > 1 else "0000"
+
+                        bun_val = user_bun if user_bun else str(item.get('lnbrMnnm', '0')).zfill(4)
+                        ji_val = user_ji if user_bun else str(item.get('lnbrSlno', '0')).zfill(4)
+
+                        return {
+                            "sigunguCd": sigungu,
+                            "bjdongCd": bjdong,
+                            "bjdongNm": item.get('emdNm', '해당동'),
+                            "bun": bun_val,
+                            "ji": ji_val,
+                            "roadAddr": item.get('roadAddr', ''),
+                            "jibunAddr": item.get('jibunAddr', '')
+                        }
             except Exception as j_err:
                 print(f"Juso API lookup fallback: {j_err}")
 
