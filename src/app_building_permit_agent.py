@@ -654,9 +654,13 @@ try:
                             st.dataframe(df_size, use_container_width=True, hide_index=True)
 
                         st.write("")
+                        bylot_cnt = safe_int(recap_item.get('bylotCnt') or item.get('bylotCnt'), default=1)
+                        bylot_desc = f"다필지 통합 관리 대지 (총 {bylot_cnt}개 지번 필지 연계)" if bylot_cnt > 1 else "단일 지번 필지 대지"
+
                         st.markdown("#### 🌱 필지 대지 속성 & 토지 지적 현황 명세")
                         df_land = pd.DataFrame([
                             {"토지/필지 항목": "대지 법정동/지번", "속성 현황": f"처인구 {parcel_info['bjdongNm']} {int(parcel_info['bun'])}-{int(parcel_info['ji'])}번지"},
+                            {"토지/필지 항목": "다필지/관련필지 통합 현황", "속성 현황": bylot_desc},
                             {"토지/필지 항목": "필지 대지면적", "속성 현황": plat_area_display},
                             {"토지/필지 항목": "필지 상 건축물 유무", "속성 현황": f"건축물 등재 대지 (총 {len(sorted_items)}개 동)"},
                             {"토지/필지 항목": "건폐율 / 용적률 지침", "속성 현황": f"건폐율 {bc_rat}% 이하 / 용적률 {vl_rat}% 이하 적용 필지"},
