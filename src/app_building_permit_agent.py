@@ -46,7 +46,7 @@ def clean_base_url(url):
 
 # 기본 백엔드 API URL 및 국토교통부 건축HUB 인증키 설정
 DEFAULT_BASE_URL = clean_base_url(get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway")
-DEFAULT_BUILDING_HUB_KEY = get_secret_safe("BUILDING_HUB_API_KEY") or os.getenv("BUILDING_HUB_API_KEY") or "29b3dfc584d48f4ec7d28c3c34d9a1f5d966b815d447aac6d3d7c8adb6c43339"
+DEFAULT_BUILDING_HUB_KEY = get_secret_safe("BUILDING_HUB_API_KEY") or os.getenv("BUILDING_HUB_API_KEY") or ""
 
 # 🎨 스트림릿 브랜딩 테마 및 레이아웃 설정
 st.set_page_config(
