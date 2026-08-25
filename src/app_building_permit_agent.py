@@ -497,8 +497,9 @@ try:
                         "serviceKey": urllib.parse.unquote(service_key)
                     }
                     
-                    # 🌟 1. 총괄표제부(getBrRecapTitleInfo) 병행 조회 (대형 대지 / 관공서 / 아파트 단지 전체 총합 수치 파싱)
+                    # 🌟 1. 총괄표제부(getBrRecapTitleInfo) 및 기본개요(getBrBasisOulnInfo) 병행 조회 (대형 대지 / 관공서 / 아파트 단지 전체 총합 수치 파싱)
                     recap_item = {}
+                    basis_item = {}
                     try:
                         recap_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"
                         recap_res = requests.get(recap_url, params=params, timeout=5)
@@ -507,6 +508,17 @@ try:
                             recap_item = rc_data[0]
                         elif isinstance(rc_data, dict):
                             recap_item = rc_data
+                    except Exception:
+                        pass
+
+                    try:
+                        basis_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrBasisOulnInfo"
+                        basis_res = requests.get(basis_url, params=params, timeout=5)
+                        bs_data = basis_res.json().get('response', {}).get('body', {}).get('items', {}).get('item', [])
+                        if isinstance(bs_data, list) and bs_data:
+                            basis_item = bs_data[0]
+                        elif isinstance(bs_data, dict):
+                            basis_item = bs_data
                     except Exception:
                         pass
 
@@ -596,32 +608,32 @@ try:
                         </div>
                         """, unsafe_allow_html=True)
 
-                        # 🌐 다필지 통합 관리 대지 전수 명세 파싱 및 수집
-                        bylot_cnt = safe_int(recap_item.get('bylotCnt') or item.get('bylotCnt'), default=1)
+                        # 🌐 다필지 통합 관리 대지 전수 명세 파싱 및 수집 (basis_item 크로스 검증)
+                        bylot_cnt = safe_int(basis_item.get('bylotCnt') or recap_item.get('bylotCnt') or item.get('bylotCnt'), default=1)
                         parcel_summary = {}
                         for s_item in sorted_items:
                             plc = str(s_item.get('platPlc') or "").strip()
                             if plc:
                                 parcel_summary.setdefault(plc, []).append(s_item)
 
-                        if len(parcel_summary) > 1 or bylot_cnt > 1:
-                            st.markdown("### 🌐 다필지 통합 관리 대지 - 관련 필지별 건축물 및 대지 명세 요약")
-                            st.caption("해당 도로명/대표지번 단지에 통합 묶여 있는 각 필지 지번별 건축물 동 수 및 연면적 전수 현황입니다.")
-                            p_rows = []
-                            for p_idx, (p_plc, p_items) in enumerate(parcel_summary.items()):
-                                p_tot_area = sum(safe_float(pi.get('totArea')) for pi in p_items)
-                                p_arch_area = sum(safe_float(pi.get('archArea')) for pi in p_items)
-                                p_main_purps = str(p_items[0].get('mainPurpsCdNm') or "").strip() or "-"
-                                p_rows.append({
-                                    "필지 순번": p_idx + 1,
-                                    "관련 필지 지번위치": p_plc,
-                                    "필지 내 등재 동 수": f"{len(p_items)}개 동",
-                                    "필지 내 총합 연면적 (㎡)": f"{p_tot_area:,.2f} ㎡",
-                                    "필지 내 총합 건축면적 (㎡)": f"{p_arch_area:,.2f} ㎡",
-                                    "필지 대표 주용도": p_main_purps
-                                })
-                            st.dataframe(pd.DataFrame(p_rows), use_container_width=True, hide_index=True)
-                            st.write("")
+                        st.markdown("### 🌐 다필지/관련필지 통합 관리 대지 - 필지별 명세 요약")
+                        st.caption("해당 도로명/대표지번 단지에 통합 묶여 있는 각 필지 지번별 건축물 동 수 및 연면적 전수 현황입니다.")
+                        p_rows = []
+                        for p_idx, (p_plc, p_items) in enumerate(parcel_summary.items()):
+                            p_tot_area = sum(safe_float(pi.get('totArea')) for pi in p_items)
+                            p_arch_area = sum(safe_float(pi.get('archArea')) for pi in p_items)
+                            p_main_purps = str(p_items[0].get('mainPurpsCdNm') or "").strip() or "-"
+                            b_cnt_desc = f"총 {bylot_cnt}개 관련 필지 통합 연계 (등재건물 {len(p_items)}개 동)" if bylot_cnt > 1 else f"단일 대지 ({len(p_items)}개 동)"
+                            p_rows.append({
+                                "필지 순번": p_idx + 1,
+                                "관련 필지 지번위치": p_plc,
+                                "단지 부속필지 통합 현황": b_cnt_desc,
+                                "필지 내 총합 연면적 (㎡)": f"{p_tot_area:,.2f} ㎡",
+                                "필지 내 총합 건축면적 (㎡)": f"{p_arch_area:,.2f} ㎡",
+                                "필지 대표 주용도": p_main_purps
+                            })
+                        st.dataframe(pd.DataFrame(p_rows), use_container_width=True, hide_index=True)
+                        st.write("")
 
                         # 🏢 대지 내 등록된 전체 동별 명세 테이블 (원형 100% 가감 없이 표출)
                         st.markdown(f"### 🏢 대지 내 등록된 전체 동별 명세 (총 {len(sorted_items)}개 동 현황)")
