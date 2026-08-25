@@ -597,6 +597,10 @@ try:
                         st.dataframe(pd.DataFrame(dong_rows), use_container_width=True, hide_index=True)
                         st.write("")
                         
+                        # 🌟 대지면적 Smart Fallback 파싱 (표제부 -> 총괄표제부 -> 공적대장 미등재 안내)
+                        final_plat_area = plat_area if plat_area > 0 else safe_float(recap_item.get('platArea'))
+                        plat_area_display = f"{final_plat_area:,.2f} ㎡" if final_plat_area > 0 else "0.00 ㎡ (공적 대장 미등재)"
+
                         col_m1, col_m2 = st.columns(2)
                         with col_m1:
                             st.markdown("#### 📋 메인 주건축물대장 표제부 세부 명세")
@@ -612,17 +616,28 @@ try:
                             st.dataframe(df_detail, use_container_width=True, hide_index=True)
                             
                         with col_m2:
-                            st.markdown("#### 📐 수치 규격 명세")
+                            st.markdown("#### 📐 대지 및 건축 수치 규격 명세")
                             df_size = pd.DataFrame([
-                                {"수치 항목": "연면적 (㎡)", "측정 수치": f"{tot_area:,} ㎡"},
-                                {"수치 항목": "건축면적 (㎡)", "측정 수치": f"{arch_area:,} ㎡"},
-                                {"수치 항목": "대지면적 (㎡)", "측정 수치": f"{plat_area:,} ㎡"},
+                                {"수치 항목": "연면적 (㎡)", "측정 수치": f"{tot_area:,.2f} ㎡"},
+                                {"수치 항목": "건축면적 (㎡)", "측정 수치": f"{arch_area:,.2f} ㎡"},
+                                {"수치 항목": "필지 대지면적 (㎡)", "측정 수치": plat_area_display},
                                 {"수치 항목": "건폐율 (%)", "측정 수치": f"{bc_rat}%"},
                                 {"수치 항목": "용적률 (%)", "측정 수치": f"{vl_rat}%"},
                                 {"수치 항목": "가구 / 세대수", "측정 수치": f"{item.get('fmlyCnt', 0)} 가구 / {item.get('hhldCnt', 0)} 세대"},
                                 {"수치 항목": "대장구분 명칭", "측정 수치": f"{item.get('regstrGbCdNm', '일반')} ({item.get('regstrKindCdNm', '일반건축물')})"}
                             ])
                             st.dataframe(df_size, use_container_width=True, hide_index=True)
+
+                        st.write("")
+                        st.markdown("#### 🌱 필지 대지 속성 & 토지 지적 현황 명세")
+                        df_land = pd.DataFrame([
+                            {"토지/필지 항목": "대지 법정동/지번", "속성 현황": f"처인구 {parcel_info['bjdongNm']} {int(parcel_info['bun'])}-{int(parcel_info['ji'])}번지"},
+                            {"토지/필지 항목": "필지 대지면적", "속성 현황": plat_area_display},
+                            {"토지/필지 항목": "필지 상 건축물 유무", "속성 현황": f"건축물 등재 대지 (총 {len(sorted_items)}개 동)"},
+                            {"토지/필지 항목": "건폐율 / 용적률 지침", "속성 현황": f"건폐율 {bc_rat}% 이하 / 용적률 {vl_rat}% 이하 적용 필지"},
+                            {"토지/필지 항목": "행정 관할 구역", "속성 현황": f"경기도 용인특례시 처인구 {parcel_info['bjdongNm']}"}
+                        ])
+                        st.dataframe(df_land, use_container_width=True, hide_index=True)
 
                         st.divider()
 
