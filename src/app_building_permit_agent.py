@@ -292,52 +292,57 @@ try:
         else:
             st.info("💡 연동된 건축 법규 파일이 없습니다.")
 
-    # ---------------------------------------------------
-    # 용인시 처인구 법정동 코드 매핑 테이블 헬퍼
-    # ---------------------------------------------------
-    YONGIN_CHEOIN_BJDONG_MAP = {
-        "김량장동": "10100",
-        "남동": "10200",
-        "역북동": "10300",
-        "삼가동": "10400",
-        "유방동": "10500",
-        "고림동": "10600",
-        "마평동": "10700",
-        "운학동": "10800",
-        "호동": "10900",
-        "해곡동": "11000",
-        "포곡읍": "25100",
-        "모현읍": "25300",
-        "남사읍": "25500",
-        "이동읍": "25700",
-        "원삼면": "31000",
-        "백암면": "32000",
-        "양지면": "33000",
-        "중앙동": "51000"
+    # 처인구 주요 도로명 ↔ 법정동 자동 변환 테이블
+    ROAD_NAME_TO_BJDONG_MAP = {
+        "중부대로": ("10400", "삼가동"),
+        "백옥대로": ("10100", "김량장동"),
+        "처인성로": ("25500", "남사읍"),
+        "명지로": ("10300", "역북동"),
+        "금학로": ("10100", "김량장동"),
+        "한산로": ("10600", "고림동"),
+        "포곡로": ("25100", "포곡읍"),
+        "모현로": ("25300", "모현읍"),
+        "이동로": ("25700", "이동읍"),
+        "원삼로": ("31000", "원삼면"),
+        "백암로": ("32000", "백암면"),
+        "양지로": ("33000", "양지면"),
+        "용인대학로": ("10400", "삼가동"),
+        "학산로": ("10100", "김량장동")
     }
 
     def resolve_parcel_codes(address_text):
         """
-        한글 주소(예: '김량장동 153' 또는 '삼가동 555-12')를 분석하여
-        sigunguCd(41461), bjdongCd, bun(0153), ji(0000) 로 파싱
+        한글 도로명주소(예: '중부대로 1199') 및 지번주소(예: '김량장동 153', '삼가동 555-12')를 
+        모두 지능적으로 인식하여 국토부 건축HUB API용 파라미터로 변환합니다.
         """
         addr_clean = address_text.strip()
         
-        # 법정동 찾기
-        matched_bjdong = "10100" # 기본값: 김량장동
-        matched_name = "김량장동"
+        # 1. 지번 법정동 우선 매핑
+        matched_bjdong = None
+        matched_name = None
         for name, code in YONGIN_CHEOIN_BJDONG_MAP.items():
             if name in addr_clean:
                 matched_bjdong = code
                 matched_name = name
                 break
                 
-        # 번지 수 파싱 (예: 153 또는 555-12)
-        m_main = re.search(r'([0-9]+)', addr_clean)
-        bun_str = str(int(m_main.group(1))).zfill(4) if m_main else "0000"
-        
-        m_sub = re.search(r'-([0-9]+)', addr_clean)
-        ji_str = str(int(m_sub.group(1))).zfill(4) if m_sub else "0000"
+        # 2. 도로명 주소 매핑 탐색
+        if not matched_bjdong:
+            for road_name, (code, d_name) in ROAD_NAME_TO_BJDONG_MAP.items():
+                if road_name in addr_clean:
+                    matched_bjdong = code
+                    matched_name = d_name
+                    break
+
+        # 기본값: 김량장동
+        if not matched_bjdong:
+            matched_bjdong = "10100"
+            matched_name = "김량장동"
+                
+        # 번지 수 파싱 (예: 153, 1199 또는 555-12)
+        nums = re.findall(r'[0-9]+', addr_clean)
+        bun_str = str(int(nums[0])).zfill(4) if len(nums) > 0 else "0000"
+        ji_str = str(int(nums[1])).zfill(4) if len(nums) > 1 else "0000"
         
         return {
             "sigunguCd": "41461", # 용인시 처인구
@@ -361,14 +366,14 @@ try:
     # ---------------------------------------------------
     with tab_parsing:
         st.markdown("### 🏢 대상지 건축물대장 실시간 파싱 및 종합 브리핑")
-        st.markdown("처인구 관내 지번 주소를 입력하면 국토교통부 건축HUB 클라우드 API에서 건축물대장 핵심 수치와 연면적, 층수, 건폐율, 주용도 정보를 1초 만에 불러옵니다.")
+        st.markdown("처인구 관내 **도로명주소**(예: *중부대로 1199*) 또는 **지번주소**(예: *김량장동 153*)를 입력하면 국토교통부 건축HUB 클라우드 API에서 건축물대장 핵심 수치와 연면적, 층수, 건폐율, 주용도 정보를 1초 만에 불러옵니다.")
         
         col_addr, col_btn = st.columns([0.8, 0.2])
         with col_addr:
             target_address = st.text_input(
-                "검색 대상지 주소 (예: 용인시 처인구 김량장동 153 또는 삼가동 555)",
+                "검색 대상지 주소 (도로명주소 / 지번주소 모두 가능)",
                 value="용인시 처인구 김량장동 153",
-                help="처인구 관내 법정동 및 본번-부번 주소를 입력하세요."
+                help="도로명주소(예: 중부대로 1199) 또는 지번주소(예: 삼가동 555)를 자유롭게 입력하세요."
             )
         with col_btn:
             st.write("<div style='height:28px;'></div>", unsafe_allow_html=True)
