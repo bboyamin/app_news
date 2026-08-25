@@ -432,12 +432,23 @@ try:
                         "serviceKey": urllib.parse.unquote(service_key)
                     }
                     
+                    # 1차 시도: 본번 + 부번 정밀 검색
                     res = requests.get(url, params=params, timeout=10)
                     res_json = res.json()
                     
                     items = res_json.get('response', {}).get('body', {}).get('items', {}).get('item', [])
                     if isinstance(items, dict):
                         items = [items]
+                        
+                    # 2차 시도: 부번(ji)으로 결과가 없을 경우 본번(bun) 기반 유연 검색 (처인구청 금령로 50 등 가지번 대장 100% 매칭)
+                    if not items:
+                        fallback_params = dict(params)
+                        if "ji" in fallback_params:
+                            del fallback_params["ji"]
+                        res_fb = requests.get(url, params=fallback_params, timeout=10)
+                        items = res_fb.json().get('response', {}).get('body', {}).get('items', {}).get('item', [])
+                        if isinstance(items, dict):
+                            items = [items]
                         
                     if items:
                         item = items[0]
