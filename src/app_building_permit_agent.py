@@ -508,17 +508,6 @@ try:
                     items = res_json.get('response', {}).get('body', {}).get('items', {}).get('item', [])
                     if isinstance(items, dict):
                         items = [items]
-                        
-                    # 3차 시도: 부번(ji)으로 결과가 없을 경우 본번(bun) 기반 유연 검색 (처인구청 금령로 50 등 가지번 대장 100% 매칭)
-                    if not items:
-                        fallback_params = dict(params)
-                        if "ji" in fallback_params:
-                            del fallback_params["ji"]
-                        res_fb = requests.get(url, params=fallback_params, timeout=10)
-                        items = res_fb.json().get('response', {}).get('body', {}).get('items', {}).get('item', [])
-                        if isinstance(items, dict):
-                            items = [items]
-
                     if items:
                         # 🌟 주건축물 최우선 정렬 + 연면적 내림차순 정렬 (부속건축물 경비실/창고 1층 오선택 100% 방지)
                         sorted_items = sorted(
@@ -709,7 +698,10 @@ try:
                         st.text_area("📋 결재 문서용 검토의견서 텍스트", value=official_report, height=220)
 
                     else:
-                        vacant_plat = f"경기도 용인시 처인구 {parcel_info['bjdongNm']} {parcel_info['bun']}-{parcel_info['ji']}번지"
+                        b_num = int(parcel_info['bun'])
+                        j_num = int(parcel_info['ji'])
+                        parcel_str = f"{b_num}-{j_num}" if j_num > 0 else f"{b_num}"
+                        vacant_plat = f"경기도 용인시 처인구 {parcel_info['bjdongNm']} {parcel_str}번지"
                         vacant_road = parcel_info.get('roadAddr') or "-"
                         
                         st.markdown(f"""
