@@ -679,7 +679,69 @@ try:
                         st.text_area("📋 결재 문서용 검토의견서 텍스트", value=official_report, height=220)
 
                     else:
-                        st.warning(f"💡 '{target_address}' 주소에 해당하는 건축물대장 정보가 없거나 필지 정보 검색 중입니다.")
+                        vacant_plat = f"경기도 용인시 처인구 {parcel_info['bjdongNm']} {parcel_info['bun']}-{parcel_info['ji']}번지"
+                        vacant_road = parcel_info.get('roadAddr') or "-"
+                        
+                        st.markdown(f"""
+                        <div class="bld-card" style="border-left: 6px solid #16a34a; background-color: #f0fdf4;">
+                            <div style="font-size:1.35rem; font-weight:800; color:#15803d; margin-bottom:8px;">
+                                🌱 {vacant_plat} (건축물 미등재 필지 / 나대지)
+                            </div>
+                            <div style="font-size:0.92rem; color:#166534; margin-bottom:12px;">
+                                📍 도로명주소: <b>{vacant_road}</b>
+                            </div>
+                            <div>
+                                <span class="stat-badge" style="background:#dcfce7; color:#15803d;">🌱 필지 상태: 건축물 미등재 (나대지/신축 예정지)</span>
+                                <span class="stat-badge" style="background:#dcfce7; color:#15803d;">📍 행정구역: 용인시 처인구 {parcel_info['bjdongNm']}</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.success("✅ **[신축/나대지 사전 검토 모드]** 공적 건축물대장상 등록된 건물이 없는 미등재 토지(신축 건축허가/신고 대상지)입니다.")
+
+                        # 🗺️ 나대지 공간 지도 뷰어
+                        st.markdown("### 🗺️ 나대지 공간정보 지적도 뷰어")
+                        map_html = f"""
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="utf-8">
+                            <style>html, body, #map {{width:100%; height:400px; margin:0; padding:0; border-radius:12px;}}</style>
+                            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+                            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                        </head>
+                        <body>
+                            <div id="map"></div>
+                            <script>
+                                var map = L.map('map').setView([37.2341, 127.2014], 17);
+                                L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+                                    maxZoom: 19,
+                                    attribution: 'OpenStreetMap'
+                                }}).addTo(map);
+                                L.marker([37.2341, 127.2014]).addTo(map)
+                                    .bindPopup('<b>{vacant_plat}</b><br>건축물 미등재 (나대지)')
+                                    .openPopup();
+                            </script>
+                        </body>
+                        </html>
+                        """
+                        components.html(map_html, height=420)
+
+                        st.divider()
+
+                        # 나대지 사전 검토의견서 자동 생성
+                        st.markdown("### 📄 나대지 신축 허가/신고 결재용 사전 검토의견서 (1초 자동생성)")
+                        vacant_report = (
+                            f"[나대지 건축신고 및 신축 허가 사전 검토의견서]\n\n"
+                            f"1. 대상지 개요\n"
+                            f"   • 대지위치: {vacant_plat}\n"
+                            f"   • 도로명주소: {vacant_road}\n"
+                            f"   • 대지 상태: 건축물 미등재 토지 (나대지 / 전 / 답 / 임야)\n\n"
+                            f"2. 신축 사전 검토의견\n"
+                            f"   • 본 대상지는 공적 건축물대장상 미등재 토지로서 신축 건축허가 및 건축신고 대상지입니다.\n"
+                            f"   • 건축 인허가 접수 시 인접 도로 접합 여부, 용도지역별 건폐율 및 용적률 제한, 토지이용계획 규제 사항을 최우선 검토하시기 바랍니다."
+                        )
+                        st.text_area("📋 결재 문서용 검토의견서 텍스트", value=vacant_report, height=220)
                 except Exception as api_e:
                     st.error(f"⚠️ 건축HUB API 연동 중 오류가 발생했습니다: {api_e}")
 
