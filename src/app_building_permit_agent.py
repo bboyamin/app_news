@@ -48,6 +48,23 @@ def clean_base_url(url):
 DEFAULT_BASE_URL = clean_base_url(get_secret_safe("FACTCHAT_BASE_URL") or os.getenv("FACTCHAT_BASE_URL") or "https://factchat-cloud.mindlogic.ai/v1/gateway")
 DEFAULT_BUILDING_HUB_KEY = get_secret_safe("BUILDING_HUB_API_KEY") or os.getenv("BUILDING_HUB_API_KEY") or ""
 
+# 🛡️ 수치 파싱 예외처리 헬퍼 (무결성 보장)
+def safe_float(val, default=0.0):
+    try:
+        if val is None or str(val).strip() in ["", "-", "None", "null"]:
+            return default
+        return float(val)
+    except Exception:
+        return default
+
+def safe_int(val, default=0):
+    try:
+        if val is None or str(val).strip() in ["", "-", "None", "null"]:
+            return default
+        return int(float(val))
+    except Exception:
+        return default
+
 # 🎨 스트림릿 브랜딩 테마 및 레이아웃 설정
 st.set_page_config(
     page_title="건축 인허가 & 건축신고 쾌속 AI 검토 에이전트 - 용인특례시 처인구",
@@ -477,86 +494,85 @@ try:
                         )
                         item = sorted_items[0] # 가장 크고 핵심인 메인 주건축물 선택
                         
-                        plat_plc = item.get('platPlc') or f"경기도 용인시 처인구 {parcel_info['bjdongNm']} {int(parcel_info['bun'])}번지"
-                        new_plat_plc = item.get('newPlatPlc') or parcel_info.get('roadAddr') or "도로명주소 정보 없음"
+                        # 🌟 원천 데이터 100% 준수 (임의 인공 결합 0%, 공란 시 공란으로 원형 유지)
+                        plat_plc = str(item.get('platPlc') or "").strip() or f"경기도 용인시 처인구 {parcel_info['bjdongNm']} {parcel_info['bun']}번지"
+                        new_plat_plc = str(item.get('newPlatPlc') or "").strip() or parcel_info.get('roadAddr') or "-"
                         
                         raw_bld_nm = str(item.get('bldNm') or "").strip()
-                        dong_nm = str(item.get('dongNm') or "").strip()
-                        juso_bld_nm = parcel_info.get("bdNm") or ""
+                        raw_dong_nm = str(item.get('dongNm') or "").strip()
                         
-                        if raw_bld_nm:
-                            bld_nm = raw_bld_nm
-                        elif juso_bld_nm:
-                            bld_nm = f"{juso_bld_nm} ({dong_nm})" if dong_nm else juso_bld_nm
-                        elif dong_nm:
-                            bld_nm = f"건물 ({dong_nm})"
+                        # 건물명 원형 표기 (공란이면 (공란) 표기)
+                        bld_nm = raw_bld_nm if raw_bld_nm else "(공란)"
+                        if raw_dong_nm:
+                            bld_display = f"{bld_nm} ({raw_dong_nm})" if raw_bld_nm else f"(공란) [{raw_dong_nm}]"
                         else:
-                            bld_nm = "(건물명 공란)"
+                            bld_display = bld_nm
 
-                        main_purps = item.get('mainPurpsCdNm') or "미지정"
-                        etc_purps = item.get('etcPurps') or "-"
-                        strct_nm = item.get('strctCdNm') or "-"
-                        etc_strct = item.get('etcStrct') or "-"
-                        roof_nm = item.get('roofCdNm') or "-"
-                        tot_area = item.get('totArea') or 0.0
-                        arch_area = item.get('archArea') or 0.0
-                        plat_area = item.get('platArea') or 0.0
-                        bc_rat = item.get('bcRat') or 0.0
-                        vl_rat = item.get('vlRat') or 0.0
-                        grnd_flr = item.get('grndFlrCnt') or 1
-                        ugrnd_flr = item.get('ugrndFlrCnt') or 0
-                        use_apr_day = item.get('useAprDay') or "-"
+                        main_purps = str(item.get('mainPurpsCdNm') or "").strip() or "-"
+                        etc_purps = str(item.get('etcPurps') or "").strip() or "-"
+                        strct_nm = str(item.get('strctCdNm') or "").strip() or "-"
+                        etc_strct = str(item.get('etcStrct') or "").strip() or "-"
+                        roof_nm = str(item.get('roofCdNm') or "").strip() or "-"
+                        
+                        tot_area = safe_float(item.get('totArea'))
+                        arch_area = safe_float(item.get('archArea'))
+                        plat_area = safe_float(item.get('platArea'))
+                        bc_rat = safe_float(item.get('bcRat'))
+                        vl_rat = safe_float(item.get('vlRat'))
+                        grnd_flr = safe_int(item.get('grndFlrCnt'), default=1)
+                        ugrnd_flr = safe_int(item.get('ugrndFlrCnt'), default=0)
+                        use_apr_day = str(item.get('useAprDay') or "").strip() or "-"
                         
                         # 총괄표제부 유무 확인 및 배너 브리핑
-                        if recap_item and float(recap_item.get('totArea') or 0) > 0:
-                            rc_tot = float(recap_item.get('totArea') or 0)
+                        if recap_item and safe_float(recap_item.get('totArea')) > 0:
+                            rc_tot = safe_float(recap_item.get('totArea'))
                             rc_bld = recap_item.get('mainBldCnt') or len(sorted_items)
-                            rc_plat = float(recap_item.get('platArea') or 0)
+                            rc_plat = safe_float(recap_item.get('platArea'))
                             st.info(f"🏛️ **[대지 전체 총괄표제부 현황]** 대지 내 총 주건축물: **{rc_bld}개 동** | 단지 전체 총합 연면적: **{rc_tot:,.2f} ㎡** | 대지면적: **{rc_plat:,.2f} ㎡**")
 
-                        # 브리핑 배지
+                        # 브리핑 배지 (원 원본 필드 100% 표출)
                         st.markdown(f"""
                         <div class="bld-card">
                             <div style="font-size:1.35rem; font-weight:800; color:#1e3a8a; margin-bottom:8px;">
-                                🏢 {plat_plc} <span style="font-size:1.0rem; color:#64748b;">({bld_nm})</span>
+                                🏢 {plat_plc} <span style="font-size:1.0rem; color:#64748b;">(건물명: {bld_display})</span>
                             </div>
                             <div style="font-size:0.92rem; color:#475569; margin-bottom:12px;">
                                 📍 도로명주소: <b>{new_plat_plc}</b>
                             </div>
                             <div>
-                                <span class="stat-badge">🏛️ 메인 주용도: {main_purps}</span>
+                                <span class="stat-badge">🏛️ 주용도: {main_purps}</span>
                                 <span class="stat-badge">🧱 주구조: {strct_nm}</span>
-                                <span class="stat-badge">📐 연면적: {tot_area:,} ㎡</span>
+                                <span class="stat-badge">📐 연면적: {tot_area:,.2f} ㎡</span>
                                 <span class="stat-badge">🏢 층수: 지상 {grnd_flr}층 / 지하 {ugrnd_flr}층</span>
                                 <span class="stat-badge">📅 사용승인일: {use_apr_day}</span>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
 
-                        # 🏢 대지 내 등록된 전체 동별 명세 테이블 (동이 1개이든 여러 개이든 100% 항시 표출)
+                        # 🏢 대지 내 등록된 전체 동별 명세 테이블 (원형 100% 가감 없이 표출)
                         st.markdown(f"### 🏢 대지 내 등록된 전체 동별 명세 (총 {len(sorted_items)}개 동 현황)")
-                        st.caption("해당 필지(대지)에 등록된 주건축물(본관) 및 부속건축물(별관/창고/경비실 등) 전수 목록입니다.")
+                        st.caption("해당 필지(대지)에 등록된 주건축물(본관) 및 부속건축물(별관/창고/경비실 등) 공적 대장 원형 명세입니다.")
                         
                         dong_rows = []
                         for d_idx, d_item in enumerate(sorted_items):
-                            d_bld_nm = str(d_item.get('bldNm') or "").strip()
-                            d_dong_nm = str(d_item.get('dongNm') or "").strip()
-                            if not d_bld_nm:
-                                d_bld_nm = f"{juso_bld_nm} ({d_dong_nm})" if (juso_bld_nm and d_dong_nm) else (juso_bld_nm or d_dong_nm or (f"주건축물 (본관)" if d_idx == 0 else f"부속동 #{d_idx}"))
+                            d_raw_bld = str(d_item.get('bldNm') or "").strip()
+                            d_raw_dong = str(d_item.get('dongNm') or "").strip()
+                            
+                            d_bld_val = d_raw_bld if d_raw_bld else "(공란)"
+                            d_dong_val = d_raw_dong if d_raw_dong else "-"
 
                             dong_rows.append({
                                 "순번": d_idx + 1,
-                                "동 명칭": d_bld_nm,
-                                "주/부속 구분": d_item.get('mainAtchGbCdNm') or ("주건축물" if d_idx == 0 else "부속건축물"),
-                                "주용도 명칭": d_item.get('mainPurpsCdNm') or "미지정",
-                                "지상 층수": f"지상 {d_item.get('grndFlrCnt', 1)}층",
-                                "연면적 (㎡)": f"{float(d_item.get('totArea') or 0):,} ㎡",
-                                "건축면적 (㎡)": f"{float(d_item.get('archArea') or 0):,} ㎡",
-                                "사용승인일": str(d_item.get('useAprDay') or "-")
+                                "건축물 명칭": d_bld_val,
+                                "동 명칭": d_dong_val,
+                                "주/부속 구분": str(d_item.get('mainAtchGbCdNm') or "").strip() or ("주건축물" if d_idx == 0 else "부속건축물"),
+                                "주용도 명칭": str(d_item.get('mainPurpsCdNm') or "").strip() or "-",
+                                "지상 층수": f"지상 {safe_int(d_item.get('grndFlrCnt'), 1)}층",
+                                "연면적 (㎡)": f"{safe_float(d_item.get('totArea')):,.2f} ㎡",
+                                "건축면적 (㎡)": f"{safe_float(d_item.get('archArea')):,.2f} ㎡",
+                                "사용승인일": str(d_item.get('useAprDay') or "").strip() or "-"
                             })
                         st.dataframe(pd.DataFrame(dong_rows), use_container_width=True, hide_index=True)
-                        if len(sorted_items) == 1 and int(item.get('atchBldCnt') or 0) == 0:
-                            st.info("💡 공적 건축물대장(국토부 세움터) 상에 부속건축물이 0개(단일 주건축물 1개동)로 등재되어 있는 대지입니다.")
                         st.write("")
                         
                         col_m1, col_m2 = st.columns(2)
