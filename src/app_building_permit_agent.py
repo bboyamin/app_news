@@ -383,22 +383,31 @@ try:
                         if len(adm_cd) >= 10:
                             sigungu = adm_cd[:5]
                             bjdong = adm_cd[5:10]
-                        # 사용자가 명시한 본번/부번 정밀 우선권 및 도로명주소 100% 일치 검증 적용
-                        nums = re.findall(r'[0-9]+', addr_clean)
-                        user_bun_str = str(int(nums[0])) if len(nums) > 0 else None
-                        user_ji_str = str(int(nums[1])) if len(nums) > 1 else "0"
+                        # 🌟 도로명주소 vs 지번주소 이중 모드 무결 파서
+                        is_road_input = bool(re.search(r'[가-힣]+(로|길|대로)\s*[0-9]+', addr_clean))
 
-                        juso_bun_str = str(item.get('lnbrMnnm', '0'))
-                        juso_ji_str = str(item.get('lnbrSlno', '0'))
+                        if is_road_input:
+                            # 🛣️ 도로명주소 입력 (예: 금령로 50, 중부대로 1199) -> 행안부 공식 지번(lnbrMnnm: 286 처인구청) 100% 반영!
+                            bun_val = str(item.get('lnbrMnnm', '0')).zfill(4)
+                            ji_val = str(item.get('lnbrSlno', '0')).zfill(4)
+                            road_addr_val = item.get('roadAddr', '')
+                            jibun_addr_val = item.get('jibunAddr', '')
+                        else:
+                            # 🏞️ 지번주소 입력 (예: 김량장동 340, 김량장동 339-1) -> 사용자가 직접 명시한 번지 수(340-0) 100% 원형 반영!
+                            nums = re.findall(r'[0-9]+', addr_clean)
+                            user_bun_str = str(int(nums[0])) if len(nums) > 0 else None
+                            user_ji_str = str(int(nums[1])) if len(nums) > 1 else "0"
 
-                        # 입력받은 본번과 부번이 행안부 API 수신 지번과 100% 동일할 때만 도로명주소 연동 (가지번 도로명 엉킴 100% 방지)
-                        is_exact_parcel = (user_bun_str == juso_bun_str) and (user_ji_str == juso_ji_str)
+                            juso_bun_str = str(item.get('lnbrMnnm', '0'))
+                            juso_ji_str = str(item.get('lnbrSlno', '0'))
 
-                        bun_val = user_bun_str.zfill(4) if user_bun_str else juso_bun_str.zfill(4)
-                        ji_val = user_ji_str.zfill(4) if user_bun_str else juso_ji_str.zfill(4)
+                            is_exact_parcel = (user_bun_str == juso_bun_str) and (user_ji_str == juso_ji_str)
 
-                        road_addr_val = item.get('roadAddr', '') if is_exact_parcel else ""
-                        jibun_addr_val = item.get('jibunAddr', '') if is_exact_parcel else ""
+                            bun_val = user_bun_str.zfill(4) if user_bun_str else juso_bun_str.zfill(4)
+                            ji_val = user_ji_str.zfill(4) if user_bun_str else juso_ji_str.zfill(4)
+
+                            road_addr_val = item.get('roadAddr', '') if is_exact_parcel else ""
+                            jibun_addr_val = item.get('jibunAddr', '') if is_exact_parcel else ""
 
                         return {
                             "sigunguCd": sigungu,
