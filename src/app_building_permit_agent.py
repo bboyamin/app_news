@@ -318,7 +318,9 @@ try:
         도로명주소 및 지번주소를 100% 무결하게 시군구코드(5자리), 법정동코드(5자리), 본번(4자리), 부번(4자리)으로 파싱합니다.
         API 통신 지연 시 내장 스마트 파서로 안전하게 자동 폴백합니다.
         """
-        addr_clean = address_text.strip()
+        # 주소 띄어쓰기 오타 자동 정제 (예: 내기로22 -> 내기로 22, 금령로50 -> 금령로 50)
+        addr_clean = re.sub(r'([가-힣]+)([0-9]+)', r'\1 \2', address_text.strip())
+        addr_clean = re.sub(r'([0-9]+)([가-힣]+)', r'\1 \2', addr_clean)
         juso_key = st.session_state.get("juso_api_key") or DEFAULT_JUSO_KEY
         
         # 1. 행정안전부 juso.go.kr API 1순위 실시간 자동 변환
@@ -451,7 +453,16 @@ try:
                             items = [items]
                         
                     if items:
-                        item = items[0]
+                        # 🌟 주건축물 최우선 정렬 + 연면적 내림차순 정렬 (부속건축물 경비실/창고 1층 오선택 100% 방지)
+                        sorted_items = sorted(
+                            items,
+                            key=lambda x: (
+                                1 if str(x.get('mainAtchGbCdNm')) == '주건축물' or str(x.get('mainAtchGbCd')) == '0' else 0,
+                                float(x.get('totArea') or 0)
+                            ),
+                            reverse=True
+                        )
+                        item = sorted_items[0] # 가장 크고 핵심인 메인 주건축물 선택
                         
                         plat_plc = item.get('platPlc') or f"경기도 용인시 처인구 {parcel_info['bjdongNm']} {int(parcel_info['bun'])}번지"
                         new_plat_plc = item.get('newPlatPlc') or "도로명주소 정보 없음"
@@ -480,7 +491,7 @@ try:
                                 📍 도로명주소: <b>{new_plat_plc}</b>
                             </div>
                             <div>
-                                <span class="stat-badge">🏛️ 주용도: {main_purps}</span>
+                                <span class="stat-badge">🏛️ 메인 주용도: {main_purps}</span>
                                 <span class="stat-badge">🧱 주구조: {strct_nm}</span>
                                 <span class="stat-badge">📐 연면적: {tot_area:,} ㎡</span>
                                 <span class="stat-badge">🏢 층수: 지상 {grnd_flr}층 / 지하 {ugrnd_flr}층</span>
@@ -488,10 +499,27 @@ try:
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
+
+                        # 한 필지 내 동이 여러 개일 경우 동별 명세 테이블 제공
+                        if len(sorted_items) > 1:
+                            st.markdown(f"#### 🏢 대지 내 전체 동별 목록 (총 {len(sorted_items)}개 동 / 주건축물 & 부속건축물 전수 명세)")
+                            dong_rows = []
+                            for d_idx, d_item in enumerate(sorted_items):
+                                dong_rows.append({
+                                    "순번": d_idx + 1,
+                                    "동 명칭": d_item.get('bldNm') or f"동 #{d_idx+1}",
+                                    "주/부속 구분": d_item.get('mainAtchGbCdNm') or "주건축물",
+                                    "주용도 명칭": d_item.get('mainPurpsCdNm') or "미지정",
+                                    "지상 층수": f"지상 {d_item.get('grndFlrCnt', 1)}층",
+                                    "연면적 (㎡)": f"{float(d_item.get('totArea') or 0):,} ㎡",
+                                    "사용승인일": str(d_item.get('useAprDay') or "-")
+                                })
+                            st.dataframe(pd.DataFrame(dong_rows), use_container_width=True, hide_index=True)
+                            st.write("")
                         
                         col_m1, col_m2 = st.columns(2)
                         with col_m1:
-                            st.markdown("#### 📋 건축물대장 표제부 세부 명세")
+                            st.markdown("#### 📋 메인 주건축물대장 표제부 세부 명세")
                             df_detail = pd.DataFrame([
                                 {"항목": "대지위치", "내용": plat_plc},
                                 {"항목": "도로명대지위치", "내용": new_plat_plc},
@@ -504,7 +532,7 @@ try:
                             st.dataframe(df_detail, use_container_width=True, hide_index=True)
                             
                         with col_m2:
-                            st.markdown("#### 📐 대지 및 건축 수치 규격 명세")
+                            st.markdown("#### 📐 수치 규격 명세")
                             df_size = pd.DataFrame([
                                 {"수치 항목": "연면적 (㎡)", "측정 수치": f"{tot_area:,} ㎡"},
                                 {"수치 항목": "건축면적 (㎡)", "측정 수치": f"{arch_area:,} ㎡"},
