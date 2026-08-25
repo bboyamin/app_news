@@ -434,7 +434,20 @@ try:
                         "serviceKey": urllib.parse.unquote(service_key)
                     }
                     
-                    # 1차 시도: 본번 + 부번 정밀 검색
+                    # 🌟 1. 총괄표제부(getBrRecapTitleInfo) 병행 조회 (대형 대지 / 관공서 / 아파트 단지 전체 총합 수치 파싱)
+                    recap_item = {}
+                    try:
+                        recap_url = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"
+                        recap_res = requests.get(recap_url, params=params, timeout=5)
+                        rc_data = recap_res.json().get('response', {}).get('body', {}).get('items', {}).get('item', [])
+                        if isinstance(rc_data, list) and rc_data:
+                            recap_item = rc_data[0]
+                        elif isinstance(rc_data, dict):
+                            recap_item = rc_data
+                    except Exception:
+                        pass
+
+                    # 2. 표제부(getBrTitleInfo) 본번 + 부번 정밀 검색
                     res = requests.get(url, params=params, timeout=10)
                     res_json = res.json()
                     
@@ -442,7 +455,7 @@ try:
                     if isinstance(items, dict):
                         items = [items]
                         
-                    # 2차 시도: 부번(ji)으로 결과가 없을 경우 본번(bun) 기반 유연 검색 (처인구청 금령로 50 등 가지번 대장 100% 매칭)
+                    # 3차 시도: 부번(ji)으로 결과가 없을 경우 본번(bun) 기반 유연 검색 (처인구청 금령로 50 등 가지번 대장 100% 매칭)
                     if not items:
                         fallback_params = dict(params)
                         if "ji" in fallback_params:
@@ -494,6 +507,13 @@ try:
                         ugrnd_flr = item.get('ugrndFlrCnt') or 0
                         use_apr_day = item.get('useAprDay') or "-"
                         
+                        # 총괄표제부 유무 확인 및 배너 브리핑
+                        if recap_item and float(recap_item.get('totArea') or 0) > 0:
+                            rc_tot = float(recap_item.get('totArea') or 0)
+                            rc_bld = recap_item.get('mainBldCnt') or len(sorted_items)
+                            rc_plat = float(recap_item.get('platArea') or 0)
+                            st.info(f"🏛️ **[대지 전체 총괄표제부 현황]** 대지 내 총 주건축물: **{rc_bld}개 동** | 단지 전체 총합 연면적: **{rc_tot:,.2f} ㎡** | 대지면적: **{rc_plat:,.2f} ㎡**")
+
                         # 브리핑 배지
                         st.markdown(f"""
                         <div class="bld-card">
