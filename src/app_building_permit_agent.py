@@ -383,13 +383,22 @@ try:
                         if len(adm_cd) >= 10:
                             sigungu = adm_cd[:5]
                             bjdong = adm_cd[5:10]
-                        # 사용자가 명시한 본번/부번 정밀 우선권 적용
+                        # 사용자가 명시한 본번/부번 정밀 우선권 및 도로명주소 100% 일치 검증 적용
                         nums = re.findall(r'[0-9]+', addr_clean)
-                        user_bun = str(int(nums[0])).zfill(4) if len(nums) > 0 else None
-                        user_ji = str(int(nums[1])).zfill(4) if len(nums) > 1 else "0000"
+                        user_bun_str = str(int(nums[0])) if len(nums) > 0 else None
+                        user_ji_str = str(int(nums[1])) if len(nums) > 1 else "0"
 
-                        bun_val = user_bun if user_bun else str(item.get('lnbrMnnm', '0')).zfill(4)
-                        ji_val = user_ji if user_bun else str(item.get('lnbrSlno', '0')).zfill(4)
+                        juso_bun_str = str(item.get('lnbrMnnm', '0'))
+                        juso_ji_str = str(item.get('lnbrSlno', '0'))
+
+                        # 입력받은 본번과 부번이 행안부 API 수신 지번과 100% 동일할 때만 도로명주소 연동 (가지번 도로명 엉킴 100% 방지)
+                        is_exact_parcel = (user_bun_str == juso_bun_str) and (user_ji_str == juso_ji_str)
+
+                        bun_val = user_bun_str.zfill(4) if user_bun_str else juso_bun_str.zfill(4)
+                        ji_val = user_ji_str.zfill(4) if user_bun_str else juso_ji_str.zfill(4)
+
+                        road_addr_val = item.get('roadAddr', '') if is_exact_parcel else ""
+                        jibun_addr_val = item.get('jibunAddr', '') if is_exact_parcel else ""
 
                         return {
                             "sigunguCd": sigungu,
@@ -397,8 +406,8 @@ try:
                             "bjdongNm": item.get('emdNm', '해당동'),
                             "bun": bun_val,
                             "ji": ji_val,
-                            "roadAddr": item.get('roadAddr', ''),
-                            "jibunAddr": item.get('jibunAddr', '')
+                            "roadAddr": road_addr_val,
+                            "jibunAddr": jibun_addr_val
                         }
             except Exception as j_err:
                 print(f"Juso API lookup fallback: {j_err}")
