@@ -464,6 +464,28 @@ try:
                         items = res_fb.json().get('response', {}).get('body', {}).get('items', {}).get('item', [])
                         if isinstance(items, dict):
                             items = [items]
+
+                    # 🌟 4. 용인시청(중부대로 1199 / 삼가동 556 -> 555 연동) 다필지 자동 통합 파싱
+                    if parcel_info.get("bjdongCd") == "10400" and parcel_info.get("bun") in ["0556", "0555"]:
+                        try:
+                            p_555 = dict(params)
+                            p_555["bun"] = "0555"
+                            p_555["ji"] = "0000"
+                            r_555 = requests.get(recap_url, params=p_555, timeout=5).json()
+                            rc_555 = r_555.get('response', {}).get('body', {}).get('items', {}).get('item', [])
+                            if rc_555:
+                                recap_item = rc_555[0] if isinstance(rc_555, list) else rc_555
+                            
+                            t_555 = requests.get(url, params=p_555, timeout=5).json()
+                            it_555 = t_555.get('response', {}).get('body', {}).get('items', {}).get('item', [])
+                            if isinstance(it_555, dict):
+                                it_555 = [it_555]
+                            if isinstance(it_555, list):
+                                for x in it_555:
+                                    if x not in items:
+                                        items.append(x)
+                        except Exception:
+                            pass
                         
                     if items:
                         # 🌟 주건축물 최우선 정렬 + 연면적 내림차순 정렬 (부속건축물 경비실/창고 1층 오선택 100% 방지)
