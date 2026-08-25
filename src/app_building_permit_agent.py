@@ -500,22 +500,24 @@ try:
                         </div>
                         """, unsafe_allow_html=True)
 
-                        # 한 필지 내 동이 여러 개일 경우 동별 명세 테이블 제공
-                        if len(sorted_items) > 1:
-                            st.markdown(f"#### 🏢 대지 내 전체 동별 목록 (총 {len(sorted_items)}개 동 / 주건축물 & 부속건축물 전수 명세)")
-                            dong_rows = []
-                            for d_idx, d_item in enumerate(sorted_items):
-                                dong_rows.append({
-                                    "순번": d_idx + 1,
-                                    "동 명칭": d_item.get('bldNm') or f"동 #{d_idx+1}",
-                                    "주/부속 구분": d_item.get('mainAtchGbCdNm') or "주건축물",
-                                    "주용도 명칭": d_item.get('mainPurpsCdNm') or "미지정",
-                                    "지상 층수": f"지상 {d_item.get('grndFlrCnt', 1)}층",
-                                    "연면적 (㎡)": f"{float(d_item.get('totArea') or 0):,} ㎡",
-                                    "사용승인일": str(d_item.get('useAprDay') or "-")
-                                })
-                            st.dataframe(pd.DataFrame(dong_rows), use_container_width=True, hide_index=True)
-                            st.write("")
+                        # 🏢 대지 내 등록된 전체 동별 명세 테이블 (동이 1개이든 여러 개이든 100% 항시 표출)
+                        st.markdown(f"### 🏢 대지 내 등록된 전체 동별 명세 (총 {len(sorted_items)}개 동 현황)")
+                        st.caption("해당 필지(대지)에 등록된 주건축물(본관) 및 부속건축물(별관/창고/경비실 등) 전수 목록입니다.")
+                        
+                        dong_rows = []
+                        for d_idx, d_item in enumerate(sorted_items):
+                            dong_rows.append({
+                                "순번": d_idx + 1,
+                                "동 명칭": d_item.get('bldNm') or (f"주건축물 (본관)" if d_idx == 0 else f"부속동 #{d_idx}"),
+                                "주/부속 구분": d_item.get('mainAtchGbCdNm') or ("주건축물" if d_idx == 0 else "부속건축물"),
+                                "주용도 명칭": d_item.get('mainPurpsCdNm') or "미지정",
+                                "지상 층수": f"지상 {d_item.get('grndFlrCnt', 1)}층",
+                                "연면적 (㎡)": f"{float(d_item.get('totArea') or 0):,} ㎡",
+                                "건축면적 (㎡)": f"{float(d_item.get('archArea') or 0):,} ㎡",
+                                "사용승인일": str(d_item.get('useAprDay') or "-")
+                            })
+                        st.dataframe(pd.DataFrame(dong_rows), use_container_width=True, hide_index=True)
+                        st.write("")
                         
                         col_m1, col_m2 = st.columns(2)
                         with col_m1:
