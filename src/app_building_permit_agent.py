@@ -465,8 +465,21 @@ try:
                         item = sorted_items[0] # 가장 크고 핵심인 메인 주건축물 선택
                         
                         plat_plc = item.get('platPlc') or f"경기도 용인시 처인구 {parcel_info['bjdongNm']} {int(parcel_info['bun'])}번지"
-                        new_plat_plc = item.get('newPlatPlc') or "도로명주소 정보 없음"
-                        bld_nm = item.get('bldNm') or "(건물명 미등록)"
+                        new_plat_plc = item.get('newPlatPlc') or parcel_info.get('roadAddr') or "도로명주소 정보 없음"
+                        
+                        raw_bld_nm = str(item.get('bldNm') or "").strip()
+                        dong_nm = str(item.get('dongNm') or "").strip()
+                        juso_bld_nm = parcel_info.get("bdNm") or ""
+                        
+                        if raw_bld_nm:
+                            bld_nm = raw_bld_nm
+                        elif juso_bld_nm:
+                            bld_nm = f"{juso_bld_nm} ({dong_nm})" if dong_nm else juso_bld_nm
+                        elif dong_nm:
+                            bld_nm = f"건물 ({dong_nm})"
+                        else:
+                            bld_nm = "(건물명 공란)"
+
                         main_purps = item.get('mainPurpsCdNm') or "미지정"
                         etc_purps = item.get('etcPurps') or "-"
                         strct_nm = item.get('strctCdNm') or "-"
@@ -506,9 +519,14 @@ try:
                         
                         dong_rows = []
                         for d_idx, d_item in enumerate(sorted_items):
+                            d_bld_nm = str(d_item.get('bldNm') or "").strip()
+                            d_dong_nm = str(d_item.get('dongNm') or "").strip()
+                            if not d_bld_nm:
+                                d_bld_nm = f"{juso_bld_nm} ({d_dong_nm})" if (juso_bld_nm and d_dong_nm) else (juso_bld_nm or d_dong_nm or (f"주건축물 (본관)" if d_idx == 0 else f"부속동 #{d_idx}"))
+
                             dong_rows.append({
                                 "순번": d_idx + 1,
-                                "동 명칭": d_item.get('bldNm') or (f"주건축물 (본관)" if d_idx == 0 else f"부속동 #{d_idx}"),
+                                "동 명칭": d_bld_nm,
                                 "주/부속 구분": d_item.get('mainAtchGbCdNm') or ("주건축물" if d_idx == 0 else "부속건축물"),
                                 "주용도 명칭": d_item.get('mainPurpsCdNm') or "미지정",
                                 "지상 층수": f"지상 {d_item.get('grndFlrCnt', 1)}층",
@@ -517,6 +535,8 @@ try:
                                 "사용승인일": str(d_item.get('useAprDay') or "-")
                             })
                         st.dataframe(pd.DataFrame(dong_rows), use_container_width=True, hide_index=True)
+                        if len(sorted_items) == 1 and int(item.get('atchBldCnt') or 0) == 0:
+                            st.info("💡 공적 건축물대장(국토부 세움터) 상에 부속건축물이 0개(단일 주건축물 1개동)로 등재되어 있는 대지입니다.")
                         st.write("")
                         
                         col_m1, col_m2 = st.columns(2)
